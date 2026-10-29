@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import type { PaletteCommand, Site } from '../types';
 import { getDomain } from '../lib/filter';
+import { CircleHelp, Search } from 'lucide-vue-next';
 
 const props = defineProps<{
   sites: Site[];
@@ -93,20 +94,11 @@ defineExpose({ open });
       @click.stop
     >
       <div class="flex items-center px-4 py-3 border-b border-cyber-line shrink-0">
-        <svg
-          class="w-5 h-5 text-cyber-cyan mr-3 shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-        >
-          <path v-if="mode === 'cmd'" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          <template v-else>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </template>
-        </svg>
+        <!-- Search icon -->
+        <Search v-if="mode === 'cmd'" class="w-5 h-5 text-cyber-cyan mr-3 shrink-0" />
+        <!-- Help icon -->
+        <CircleHelp v-else class="w-5 h-5 text-cyber-cyan mr-3 shrink-0" />
+
         <input
           ref="inputEl"
           v-model="query"

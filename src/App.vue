@@ -53,6 +53,7 @@ const {
 
 const pageStart = computed(() => (currentPage.value - 1) * pageSize.value);
 
+// ------------- 标签映射 -------------
 const LABELS: Record<FilterKey, Record<string, string>> = {
   types: TYPE_LABEL,
   licenses: LICENSE_LABEL,

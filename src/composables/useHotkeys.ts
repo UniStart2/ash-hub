@@ -19,7 +19,7 @@ export interface HotkeyDeps {
 /**
  * 全局快捷键，按键表与原型 v22 冻结一致：
  * Ctrl/Cmd+K 命令面板 · ? 帮助 · / 聚焦搜索 · Esc 逐层退出 · Enter 打开首个结果
- * R 随机 · G/L 网格/列表 · S 只看收藏
+ * R 随机 · G/L 网格/列表 · S 只看收藏（不区分大小写）
  *
  * 输入框聚焦时（isTyping）不触发单键快捷键；palette 打开时只响应 Esc。
  */
@@ -51,12 +51,14 @@ export function useHotkeys(deps: HotkeyDeps) {
       e.preventDefault();
       deps.searchInput.value?.focus();
     }
+
     if (e.key === 'Escape') {
       if (isTyping) (document.activeElement as HTMLElement | null)?.blur();
       if (deps.search.value) deps.search.value = '';
       else if (deps.hasActiveFilters.value) deps.resetAll();
       deps.contextMenu.close();
     }
+
     if (e.key === 'Enter' && isTyping && document.activeElement?.id === 'searchInput') {
       const first = deps.filteredFirst();
       if (deps.totalSites.value > 0 && first) {
@@ -65,6 +67,7 @@ export function useHotkeys(deps: HotkeyDeps) {
         setTimeout(() => window.open(first.url, '_blank'), 300);
       }
     }
+
     if (e.key.toLowerCase() === 'r' && !isTyping && !e.repeat) deps.openRandom();
     if (e.key.toLowerCase() === 'g' && !isTyping) deps.view.value = 'grid';
     if (e.key.toLowerCase() === 'l' && !isTyping) deps.view.value = 'list';

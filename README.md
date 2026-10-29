@@ -6,8 +6,8 @@
 
 ## 功能
 
-- 素材站点目录：~40 个免费游戏素材站点，类型 / 许可 / 注册要求三维标注
-- 高级搜索：`lic:commercial 2d`、`-register:must`、`*` 通配符、拼音映射
+- 素材站点目录：43 个免费游戏素材站点，类型 / 许可 / 注册要求三维标注
+- 搜索与筛选：空格分词 AND 匹配，命中按名称 > 标签 > 描述评分排序，关键词高亮
 - 命令面板：`Ctrl/Cmd + K`，视图切换、随机站点、筛选预设
 - 自定义排序：拖拽卡片，localStorage 持久化
 - 状态分享：搜索 / 筛选 / 收藏同步 URL hash
@@ -16,21 +16,21 @@
 ## 快速开始
 
 ```bash
-open base.html   # 或 npx serve .
+pnpm install
+pnpm dev        # 开发
+pnpm build      # 产物在 dist/
+pnpm test       # vitest
 ```
 
-## 技术栈
-
-当前：Alpine.js + Tailwind CDN（单文件原型）
-目标：Vite · Vue 3 · TypeScript · Tailwind CSS · pnpm
+原始单文件原型在 `prototype/base.html`，直接用浏览器打开即可查看。
 
 ## 文档
 
-| 文档 | 内容 |
-|---|---|
+| 文档                                           | 内容                                   |
+| ---------------------------------------------- | -------------------------------------- |
 | [docs/design-tokens.md](docs/design-tokens.md) | 设计系统基准（色板 / 字体 / 视觉特征） |
-| [docs/development.md](docs/development.md) | 开发流程（版本 / 分支 / 提交 / hooks） |
-| [AGENTS.md](AGENTS.md) | AI 协作约束与验证清单 |
+| [docs/development.md](docs/development.md)     | 开发流程（版本 / 分支 / 提交 / hooks） |
+| [AGENTS.md](AGENTS.md)                         | AI 协作约束与验证清单                  |
 
 ## 目录
 

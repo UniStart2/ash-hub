@@ -62,3 +62,10 @@ lint-staged 规则：
 - 所有变更走 PR，禁止直推 `main` / `develop`
 - AI 实质性参与的提交带 trailer：`AI-Assisted: true`
 - 合并前回归测试；完成度以验收交付物计，不以生成量计
+
+## 提交前检查
+
+每次提交前必须完成，与 lint-staged 同一道关：
+
+- [ ] **文档同步**：本次改动影响的文档（`README.md` / `AGENTS.md` / `docs/*`）已同步更新——过期的文档比没有文档危害更大
+- [ ] 提交信息符合 Conventional Commits（commit-msg hook 会强制校验）
