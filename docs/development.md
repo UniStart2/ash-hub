@@ -69,3 +69,14 @@ lint-staged 规则：
 
 - [ ] **文档同步**：本次改动影响的文档（`README.md` / `AGENTS.md` / `docs/*`）已同步更新——过期的文档比没有文档危害更大
 - [ ] 提交信息符合 Conventional Commits（commit-msg hook 会强制校验）
+
+## 发布部署
+
+push 到 `main` 由 `.github/workflows/deploy.yml` 自动构建并双路部署：
+
+| 目标             | 地址形态                           | 前提配置                                                                                                                                       |
+| ---------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Pages     | `https://<user>.github.io/<repo>/` | 仓库 Settings → Pages → Source 选 **GitHub Actions**                                                                                           |
+| Cloudflare Pages | `https://asset-hub.pages.dev`      | ① Cloudflare dashboard 手动创建 Pages 项目 `asset-hub`；② 仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（Pages 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID` |
+
+实现要点：GitHub Pages 挂在子路径，构建时注入 `VITE_BASE=/<repo>/`；Cloudflare 在根路径，`base=/`。两份产物由 matrix 分别构建，不可复用。

@@ -35,7 +35,7 @@ pnpm test       # vitest
 ## 目录
 
 ```
-base.html   # 原型：功能规格 + design token 唯一事实来源
+prototype/  # 原型：功能规格 + design token 唯一事实来源
 assets/     # 原始素材包（Kenney 等），未接入
 docs/       # 专项文档
 ```

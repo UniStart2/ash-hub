@@ -1,0 +1,89 @@
+name: deploy
+
+# push 到 main 或手动触发时，构建并双路部署到 GitHub Pages 与 Cloudflare Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 部署类操作必须串行，避免两次 push 的构建互相覆盖线上状态
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # 按部署目标构建两份产物：
+  # - GitHub Pages 挂在仓库子路径（/<repo>/），Vite base 必须是子路径，否则资源 404
+  # - Cloudflare Pages 挂在根路径，base 为 /
+  # 两者资源 URL 不同，不能复用同一份 dist
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [github-pages, cloudflare]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: build
+        env:
+          VITE_BASE: ${{ matrix.target == 'github-pages' && format('/{0}/', github.event.repository.name) || '/' }}
+        run: pnpm build
+
+      - name: upload artifact (github pages)
+        if: matrix.target == 'github-pages'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: upload artifact (cloudflare)
+        if: matrix.target == 'cloudflare'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-cloudflare
+          path: dist
+          retention-days: 1
+
+  deploy-github-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  deploy-cloudflare:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-cloudflare
+          path: dist
+
+      # secrets 需在仓库 Settings → Secrets 配置：
+      #   CLOUDFLARE_API_TOKEN（需 Pages 编辑权限）
+      #   CLOUDFLARE_ACCOUNT_ID
+      # Cloudflare 侧需先手动创建 Pages 项目 asset-hub
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=asset-hub
