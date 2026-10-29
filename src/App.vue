@@ -16,6 +16,8 @@ import EmptyState from './components/EmptyState.vue';
 import AppToast from './components/AppToast.vue';
 import CommandPalette from './components/CommandPalette.vue';
 import ContextMenu from './components/ContextMenu.vue';
+import type { FilterKey } from './types';
+import { TYPE_LABEL, LICENSE_LABEL, REGISTER_LABEL } from './data/labels';
 
 // 初始化顺序（与原型 init 一致）：标记 NEW → 应用自定义排序 → 目录状态
 const initialOrder: string[] = JSON.parse(localStorage.getItem('ah_custom_order') || '[]');
@@ -50,6 +52,15 @@ const {
 } = catalog;
 
 const pageStart = computed(() => (currentPage.value - 1) * pageSize.value);
+
+const LABELS: Record<FilterKey, Record<string, string>> = {
+  types: TYPE_LABEL,
+  licenses: LICENSE_LABEL,
+  registers: REGISTER_LABEL,
+};
+function getLabel(key: FilterKey, val: string): string {
+  return LABELS[key][val] ?? val; // 查不到标签时回退显示原始值，界面永不空白
+}
 
 // ---------- URL hash 同步 ----------
 useHashSync({ search, favOnly, activeFilters });
@@ -286,14 +297,14 @@ watch(menuVisible, (v) => {
 
         <div class="flex gap-2.5 items-stretch">
           <div
-            class="relative flex-1 flex items-center gap-3 h-[50px] px-4 bg-gradient-to-b from-cyber-panel2 to-cyber-panel border border-cyber-line rounded-sm transition-all group focus-within:border-cyber-cyan/50 focus-within:shadow-[0_0_30px_rgba(0,240,255,0.07)] cursor-text"
+            class="relative flex-1 flex items-center gap-3 h-12.5 px-4 bg-linear-to-b from-cyber-panel2 to-cyber-panel border border-cyber-line rounded-sm transition-all group focus-within:border-cyber-cyan/50 focus-within:shadow-[0_0_30px_rgba(0,240,255,0.07)] cursor-text"
             @click="searchInput?.focus()"
           >
             <div
-              class="absolute left-0 top-0 w-[3px] h-full bg-cyber-cyan shadow-[0_0_12px_#00f0ff] opacity-0 transition-opacity rounded-l-sm group-focus-within:opacity-100"
+              class="absolute left-0 top-0 w-0.75 h-full bg-cyber-cyan shadow-[0_0_12px_#00f0ff] opacity-0 transition-opacity rounded-l-sm group-focus-within:opacity-100"
             ></div>
             <svg
-              class="w-[15px] h-[15px] text-cyber-dim group-focus-within:text-cyber-cyan transition-colors shrink-0"
+              class="w-3.75 h-3.75 text-cyber-dim group-focus-within:text-cyber-cyan transition-colors shrink-0"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -359,12 +370,12 @@ watch(menuVisible, (v) => {
 
           <button
             type="button"
-            class="btn-random-group flex items-center justify-center w-[50px] h-[50px] bg-gradient-to-b from-[rgba(255,46,136,0.09)] to-[rgba(255,46,136,0.04)] border border-cyber-magenta/30 rounded-sm text-cyber-magenta hover:from-[rgba(255,46,136,0.18)] hover:to-[rgba(255,46,136,0.08)] hover:border-cyber-magenta hover:shadow-[0_0_24px_rgba(255,46,136,0.25)] hover:bg-[rgba(255,46,136,0.1)] active:scale-95 transition-all shrink-0"
+            class="btn-random-group flex items-center justify-center w-12.5 h-12.5 bg-linear-to- from-[rgba(255,46,136,0.09)] to-[rgba(255,46,136,0.04)] border border-cyber-magenta/30 rounded-sm text-cyber-magenta hover:from-[rgba(255,46,136,0.18)] hover:to-[rgba(255,46,136,0.08)] hover:border-cyber-magenta hover:shadow-[0_0_24px_rgba(255,46,136,0.25)] hover:bg-[rgba(255,46,136,0.1)] active:scale-95 transition-all shrink-0"
             title="随机发现 (R)"
             @click="openRandom"
           >
             <svg
-              class="w-[18px] h-[18px] random-icon"
+              class="w-4.5 h-4.5 random-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -378,7 +389,7 @@ watch(menuVisible, (v) => {
         </div>
 
         <div
-          class="flex items-center gap-3 flex-wrap p-2.5 bg-gradient-to-b from-[rgba(15,18,32,0.55)] to-[rgba(12,14,23,0.55)] border border-cyber-line rounded-sm backdrop-blur-sm"
+          class="flex items-center gap-3 flex-wrap p-2.5 bg-linear-to-b from-[rgba(15,18,32,0.55)] to-[rgba(12,14,23,0.55)] border border-cyber-line rounded-sm backdrop-blur-sm"
         >
           <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto">
             <span class="font-mono text-[9.5px] text-cyber-dim2 tracking-widest px-1 uppercase"
@@ -403,7 +414,7 @@ watch(menuVisible, (v) => {
               🔊 音频音效
             </button>
           </div>
-          <div class="w-px h-[18px] bg-cyber-line2 mx-0.5 hidden sm:block"></div>
+          <div class="w-px h-4.5 bg-cyber-line2 mx-0.5 hidden sm:block"></div>
 
           <div
             class="flex items-center gap-0.5 p-0.5 bg-black/25 border border-cyber-line rounded-sm"
@@ -479,7 +490,7 @@ watch(menuVisible, (v) => {
 
           <div class="ml-auto flex items-center gap-1.5">
             <button
-              class="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-cyber-line rounded-sm text-cyber-dim hover:text-cyber-cyan hover:border-cyber-cyan/40 hover:bg-cyber-cyan/5 transition-all"
+              class="w-7.5 h-7.5 flex items-center justify-center bg-transparent border border-cyber-line rounded-sm text-cyber-dim hover:text-cyber-cyan hover:border-cyber-cyan/40 hover:bg-cyber-cyan/5 transition-all"
               title="复制全部"
               @click="copyAll"
             >
@@ -498,7 +509,7 @@ watch(menuVisible, (v) => {
         </div>
 
         <div
-          class="relative z-30 flex items-center justify-between gap-3 flex-wrap font-mono text-[11px] tracking-wider px-0.5 min-h-[24px]"
+          class="relative z-30 flex items-center justify-between gap-3 flex-wrap font-mono text-[11px] tracking-wider px-0.5 min-h-6"
         >
           <div class="flex items-center gap-2 text-cyber-dim shrink-0">
             <div
@@ -525,7 +536,7 @@ watch(menuVisible, (v) => {
                 class="flex items-center gap-1 px-2 py-0.5 border rounded-sm text-[10px] transition-colors shrink-0"
                 @click="toggleFilter(key, v)"
               >
-                <span>{{ v }}</span
+                <span>{{ getLabel(key, v) }}</span
                 ><span class="opacity-60 text-[11px] leading-none">×</span>
               </button>
             </template>
