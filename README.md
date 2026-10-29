@@ -2,7 +2,9 @@
 
 免费游戏素材导航控制台 —— 赛博朋克风格的静态站点聚合工具。
 
-当前处于**原型阶段**：产品形态与设计系统已沉淀在单文件原型 `base.html`（v22）中，后续基于 Vite + Vue 3 组件化拆分迭代。
+纯前端、无后端的静态站点。产品形态与设计系统源自单文件原型 `prototype/base.html`（v22），当前已由 Vite + Vue 3 全量迁移实现（`src/`），push 到 `main` 自动双路部署。
+
+**线上演示**：[GitHub Pages](https://unistart2.github.io/ash-hub/) · [Cloudflare Workers](https://ash-hub.unistart.workers.dev)（push 到 `main` 自动部署，见 [docs/development.md](docs/development.md#发布部署)）
 
 ## 功能
 
@@ -35,8 +37,9 @@ pnpm test       # vitest
 ## 目录
 
 ```
-prototype/  # 原型：功能规格 + design token 唯一事实来源
-assets/     # 原始素材包（Kenney 等），未接入
+src/        # 当前实现（Vite + Vue 3 + TS + Tailwind v4）
+prototype/  # 原始单文件原型：功能规格 + design token 基准
+assets/     # 原始素材包（未进版本控制）
 docs/       # 专项文档
 ```
 
