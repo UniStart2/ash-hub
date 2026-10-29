@@ -1,0 +1,12 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": ["dist/**", "node_modules/**", "prototype/**"],
+  "rules": {
+    "at-rule-no-unknown": [
+      true,
+      { "ignoreAtRules": ["theme", "utility", "variant", "custom-variant"] }
+    ],
+    "keyframes-name-pattern": null,
+    "import-notation": "string"
+  }
+}

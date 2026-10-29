@@ -1,0 +1,14 @@
+# deps
+node_modules/
+
+# build
+dist/
+
+# local
+.DS_Store
+*.local
+tmp/
+.omp/
+
+# 第三方素材原始包（kenney 等，可从原站重新下载，不进版本控制）
+assets/

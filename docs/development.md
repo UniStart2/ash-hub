@@ -8,13 +8,13 @@
 
 ## 分支模型
 
-| 分支 | 用途 |
-|---|---|
-| `main` | 发布，仅接受 `release/*` 与 hotfix 合并 |
-| `develop` | 日常集成 |
-| `feat/<scope>` | 新功能，从 `develop` 切出，PR 合回 |
-| `fix/<scope>` | 修复，同上 |
-| `release/x.y.z` | 发布准备 → `main` + 回合 `develop` |
+| 分支            | 用途                                    |
+| --------------- | --------------------------------------- |
+| `main`          | 发布，仅接受 `release/*` 与 hotfix 合并 |
+| `develop`       | 日常集成                                |
+| `feat/<scope>`  | 新功能，从 `develop` 切出，PR 合回      |
+| `fix/<scope>`   | 修复，同上                              |
+| `release/x.y.z` | 发布准备 → `main` + 回合 `develop`      |
 
 ## 提交：Conventional Commits
 
@@ -33,15 +33,23 @@
 
 ## Pre-commit 工具链
 
-| Hook | 工具 | 职责 |
-|---|---|---|
-| `pre-commit` | lint-staged | 仅检查暂存文件 |
-| `commit-msg` | commitlint | 校验提交信息（`@commitlint/config-conventional`） |
+| Hook         | 工具        | 职责                                              |
+| ------------ | ----------- | ------------------------------------------------- |
+| `pre-commit` | lint-staged | 仅检查暂存文件                                    |
+| `commit-msg` | commitlint  | 校验提交信息（`@commitlint/config-conventional`） |
 
 lint-staged 规则：
 
 - `*.{ts,vue,js}` → ESLint --fix + Prettier
 - `*.{css,vue,html}` → Stylelint + Prettier
+
+工具职责划分（同一规则不重复定义）：
+
+| 工具      | 只管                                        |
+| --------- | ------------------------------------------- |
+| ESLint    | 代码质量（未用变量、危险写法、Vue/TS 规则） |
+| Prettier  | 纯格式化（缩进、引号、换行）                |
+| Stylelint | CSS 规范（选择器、属性书写）                |
 
 约束：
 

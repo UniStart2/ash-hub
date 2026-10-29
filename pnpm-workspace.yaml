@@ -1,0 +1,3 @@
+# pnpm 11+ 配置：允许 esbuild 等依赖执行构建脚本（postinstall 安装平台二进制）
+allowBuilds:
+  esbuild: true
