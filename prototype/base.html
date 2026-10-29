@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASSET//HUB — 免费游戏素材控制台 v22</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          cyber: {
+            bg: '#05060a', panel: '#0c0e17', panel2: '#0f1220', panel3: '#131728',
+            line: '#191d2c', line2: '#252b3f', text: '#c4ccd8', dim: '#5a6379', dim2: '#343b4e',
+            cyan: '#00f0ff', magenta: '#ff2e88', lime: '#c6ff00', violet: '#a78bfa', amber: '#ffb800', gold: '#ffd166', danger: '#ff3333'
+          }
+        },
+        fontFamily: { display: ['Chakra Petch', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+        boxShadow: {
+          'cyber-cyan': '0 0 16px rgba(0,240,255,.45), inset 0 0 10px rgba(255,255,255,.25)',
+          'cyber-lime': '0 0 16px rgba(198,255,0,.4), inset 0 0 10px rgba(255,255,255,.25)',
+          'cyber-magenta': '0 0 16px rgba(255,46,136,.45), inset 0 0 10px rgba(255,255,255,.2)'
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  body { font-family: 'Chakra Petch', system-ui, sans-serif; background: #05060a; color: #c4ccd8; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(0,240,255,.28); color: #fff; }
+
+  .grid-floor { position: fixed; bottom: 0; left: 0; right: 0; height: 65vh; background-image: linear-gradient(to right, rgba(0,240,255,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,240,255,.055) 1px, transparent 1px); background-size: 64px 64px; transform: perspective(280px) rotateX(62deg); transform-origin: bottom center; mask-image: linear-gradient(to top, #000 0%, transparent 85%); -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 85%); pointer-events: none; z-index: 0; opacity: 0.55; }
+  .glow-orb { position: fixed; top: -20vh; left: 20%; width: 60vw; height: 60vh; background: radial-gradient(circle, rgba(0,240,255,.07), transparent 65%); pointer-events: none; z-index: 0; filter: blur(40px); }
+  .glow-orb.pink { left: auto; right: 0; top: auto; bottom: -20vh; background: radial-gradient(circle, rgba(255,46,136,.055), transparent 65%); }
+  .noise { position: fixed; inset: 0; pointer-events: none; z-index: 9997; opacity: 0.028; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); mix-blend-mode: overlay; }
+  body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9998; background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px); opacity: 0.3; mix-blend-mode: multiply; }
+
+  .title-glitch { position: relative; user-select: none; width: max-content; text-shadow: 0 0 40px rgba(0,240,255,.22); }
+  .title-glitch::before, .title-glitch::after { content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; }
+  .title-glitch::before { color: #ff2e88; opacity: 0.55; clip-path: inset(0 0 62% 0); animation: glitch-a 4.2s infinite steps(1); }
+  .title-glitch::after { color: #00f0ff; opacity: 0.55; clip-path: inset(58% 0 0 0); animation: glitch-b 4.2s infinite steps(1); }
+  @keyframes glitch-a { 0%, 86%, 100% { transform: translate(0); } 88% { transform: translate(-2px, -1px); } 90% { transform: translate(2px, 1px); } 92% { transform: translate(-1px, 0); } 94% { transform: translate(1px, -1px); } }
+  @keyframes glitch-b { 0%, 86%, 100% { transform: translate(0); } 89% { transform: translate(2px, 1px); } 91% { transform: translate(-2px, -1px); } 93% { transform: translate(1px, 1px); } 95% { transform: translate(-1px, 0); } }
+
+  /* 增加 select-none 防止拖拽时文字被选中 */
+  .cyber-card { position: relative; background: linear-gradient(152deg, #10131f 0%, #0a0c15 100%); border: 1px solid #191d2c; transition: all 0.18s cubic-bezier(.22,.68,.32,1); isolation: isolate; overflow: hidden; user-select: none; }
+  .cyber-card::before, .cyber-card::after { content: ''; position: absolute; width: 13px; height: 13px; border-color: #00f0ff; border-style: solid; opacity: 0; transition: opacity 0.2s, border-color 0.2s; pointer-events: none; z-index: 2; }
+  .cyber-card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .cyber-card::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+  .cyber-card:hover::before, .cyber-card:hover::after { opacity: 1; }
+  .cyber-card:hover { border-color: rgba(0,240,255,.42); transform: translateY(-3px); box-shadow: 0 10px 34px rgba(0,0,0,.55), 0 0 34px rgba(0,240,255,.07); }
+  .cyber-card[data-lic="free-commercial"]:hover { border-color: rgba(198,255,0,.42); box-shadow: 0 10px 34px rgba(0,0,0,.55), 0 0 34px rgba(198,255,0,.07); }
+  .cyber-card[data-lic="cc-by"]:hover { border-color: rgba(255,184,0,.42); box-shadow: 0 10px 34px rgba(0,0,0,.55), 0 0 34px rgba(255,184,0,.07); }
+  .cyber-card[data-lic="mixed"]:hover { border-color: rgba(255,46,136,.42); box-shadow: 0 10px 34px rgba(0,0,0,.55), 0 0 34px rgba(255,46,136,.07); }
+
+  .card-spotlight { position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0; transition: opacity .25s; background: radial-gradient(320px circle at var(--mx,50%) var(--my,50%), rgba(0,240,255,.075), transparent 45%); }
+  .cyber-card:hover .card-spotlight { opacity: 1; }
+  .card-anim { animation: cardIn 0.42s cubic-bezier(.22,.68,.32,1) both; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+
+  mark.hl { background: rgba(0,240,255,.18); color: #00f0ff; padding: 0 2px; border-radius: 1px; border-bottom: 1px solid #00f0ff; text-shadow: 0 0 8px rgba(0,240,255,.5); }
+
+  .empty-hud-panel { position: relative; background: rgba(12, 14, 23, 0.85); border: 1px solid var(--line); padding: 20px 24px; width: 100%; max-width: 320px; backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); }
+  .empty-hud-panel::before, .empty-hud-panel::after, .empty-hud-panel .corner-bl, .empty-hud-panel .corner-br { content: ''; position: absolute; width: 8px; height: 8px; border-color: var(--magenta); border-style: solid; pointer-events: none; }
+  .empty-hud-panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .empty-hud-panel::after { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+  .empty-hud-panel .corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+  .empty-hud-panel .corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #252b3f; border-radius: 4px; border: 2px solid #05060a; }
+  ::-webkit-scrollbar-thumb:hover { background: #2f374d; }
+  [x-cloak] { display: none !important; }
+
+  .btn-random-group:hover .random-icon { transform: rotate(180deg) scale(1.1); }
+  .random-icon { transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+
+  .context-card { -webkit-touch-callout: none; user-select: none; }
+
+  .is-dragging {
+    opacity: 0.25 !important;
+    border-color: var(--cyan) !important;
+    box-shadow: 0 0 20px var(--cyan) !important;
+    transform: scale(0.98) !important;
+  }
+  .drag-target {
+    border-color: var(--cyan) !important;
+    background: rgba(0,240,255,0.08) !important;
+    transform: scale(1.02) !important;
+    box-shadow: 0 0 30px rgba(0,240,255,0.2) !important;
+  }
+</style>
+</head>
+
+<body x-data="assetHub()" x-init="init()" @click="closeContextMenu">
+  <div class="grid-floor"></div><div class="glow-orb"></div><div class="glow-orb pink"></div><div class="noise"></div>
+
+  <div class="relative z-10 grid grid-cols-1 lg:grid-cols-[272px_1fr] max-w-[1540px] mx-auto min-h-screen">
+
+    <aside class="sticky top-0 h-screen flex flex-col gap-6 p-6 border-r border-cyber-line bg-gradient-to-b from-[rgba(12,14,23,0.72)] to-[rgba(5,6,10,0.4)] backdrop-blur-md overflow-y-auto overflow-x-hidden">
+      <div class="flex flex-col gap-2 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-[11px] h-[11px] bg-cyber-cyan shadow-[0_0_14px_#00f0ff,0_0_28px_rgba(0,240,255,0.4)] animate-pulse" style="clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);"></div>
+          <span class="font-display text-[19px] font-bold tracking-tight text-white">ASSET<span class="text-cyber-magenta italic">//</span>HUB</span>
+          <span class="ml-auto font-mono text-[9.5px] text-cyber-dim tracking-widest border border-cyber-line2 px-1.5 py-0.5 rounded-sm">v22</span>
+        </div>
+        <div class="font-mono text-[10px] text-cyber-dim2 tracking-[0.18em] uppercase">free game asset console</div>
+      </div>
+
+      <div x-show="recentSites.length > 0" x-cloak class="flex flex-col gap-2 shrink-0">
+        <div class="flex items-center justify-between font-mono text-[10.5px] text-cyber-dim uppercase tracking-widest">
+          <span class="text-cyber-text font-semibold normal-case">最近访问</span>
+          <button @click="clearRecent" class="hover:text-cyber-magenta transition-colors p-1" title="清空"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="site in recentSites" :key="site.url">
+            <button @click="window.open(site.url, '_blank')" class="font-mono text-[10px] text-cyber-dim bg-white/5 border border-cyber-line rounded-sm px-2 py-1 hover:text-cyber-cyan hover:border-cyber-cyan/30 transition-colors" x-text="site.name"></button>
+          </template>
+        </div>
+      </div>
+
+      <template x-for="group in filterDefs" :key="group.key">
+        <div class="flex flex-col gap-2.5 shrink-0">
+          <div class="flex items-center font-mono text-[10.5px] uppercase tracking-widest text-cyber-dim">
+            <span class="text-cyber-text font-semibold tracking-normal" x-text="group.cn"></span>
+            <div class="flex-1 h-px ml-2.5 bg-gradient-to-r from-cyber-line2 to-transparent"></div>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <template x-for="(label, val) in group.opts" :key="val">
+              <button @click="toggleFilter(group.key, val)" :class="{ 'bg-cyber-cyan border-cyber-cyan text-[#02181a] font-bold shadow-cyber-cyan': activeFilters[group.key].includes(val) && group.key === 'types', 'bg-cyber-lime border-cyber-lime text-[#0e1400] font-bold shadow-cyber-lime': activeFilters[group.key].includes(val) && group.key === 'licenses', 'bg-cyber-magenta border-cyber-magenta text-white font-bold shadow-cyber-magenta': activeFilters[group.key].includes(val) && group.key === 'registers', 'bg-transparent border-cyber-line text-cyber-dim hover:border-cyber-line2 hover:text-cyber-text hover:bg-white/5': !activeFilters[group.key].includes(val) }" class="font-mono text-[11px] border rounded-sm px-2 py-1 flex items-center gap-1.5 transition-all duration-150 active:scale-95">
+                <span x-text="label"></span><span class="text-[9px] px-1 rounded-sm bg-black/20" x-text="getCount(group.key, val)"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <button @click="favOnly = !favOnly" :class="favOnly ? 'text-cyber-gold border-cyber-gold/40 bg-cyber-gold/5 shadow-[0_0_16px_rgba(255,209,102,0.1)]' : 'text-cyber-dim border-cyber-line hover:border-cyber-line2 hover:text-cyber-text hover:bg-white/5'" class="flex items-center justify-between w-full px-3 py-2 border rounded-sm font-mono text-[11px] transition-all shrink-0 mt-auto">
+        <span class="flex items-center gap-2"><span class="text-[13px]" :class="favOnly ? 'text-cyber-gold' : ''">★</span><span>只看收藏</span></span><span class="text-[10px] bg-white/5 px-1.5 py-0.5 rounded-sm" x-text="favorites.length"></span>
+      </button>
+    </aside>
+
+    <main class="flex flex-col p-6 lg:p-8 pb-16 min-w-0">
+      <header class="flex flex-col gap-5 mb-6 shrink-0 relative z-20">
+        <div class="flex items-end justify-between flex-wrap gap-5">
+          <div class="flex flex-col gap-1.5">
+            <h1 class="title-glitch font-display text-[clamp(30px,4.4vw,48px)] font-bold tracking-tighter text-white leading-none" data-text="ASSET//HUB">ASSET<span class="text-cyber-magenta drop-shadow-[0_0_24px_rgba(255,46,136,0.7)]">//</span>HUB</h1>
+            <div class="font-mono text-[11px] text-cyber-dim tracking-widest flex items-center gap-2">
+              <div class="w-5 h-px bg-cyber-dim2"></div>
+              高质量免费游戏素材 · 离线单文件 · <b class="text-cyber-cyan font-medium" x-text="sites.length"></b> 个站点
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2.5 items-stretch">
+          <div class="relative flex-1 flex items-center gap-3 h-[50px] px-4 bg-gradient-to-b from-cyber-panel2 to-cyber-panel border border-cyber-line rounded-sm transition-all group focus-within:border-cyber-cyan/50 focus-within:shadow-[0_0_30px_rgba(0,240,255,0.07)] cursor-text" @click="$refs.searchInput.focus()">
+            <div class="absolute left-0 top-0 w-[3px] h-full bg-cyber-cyan shadow-[0_0_12px_#00f0ff] opacity-0 transition-opacity rounded-l-sm group-focus-within:opacity-100"></div>
+            <svg class="w-[15px] h-[15px] text-cyber-dim group-focus-within:text-cyber-cyan transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+            <input x-ref="searchInput" x-model="search" @keydown.escape="search=''" type="text" placeholder="搜索站点 (支持空格分词，按 Enter 打开首个)…" class="flex-1 min-w-0 bg-transparent border-none outline-none text-white font-mono text-[13.5px] tracking-wide placeholder:text-cyber-dim2" autocomplete="off" spellcheck="false">
+
+            <button x-show="search.length > 0" @click.stop="search=''" class="text-cyber-dim hover:text-cyber-magenta p-1 shrink-0"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+
+            <button @click.stop="openCmdPalette('cmd')" class="ml-1 flex items-center gap-1.5 px-2 py-1 bg-black/25 border border-cyber-line2 rounded-sm text-cyber-dim hover:text-cyber-cyan hover:border-cyber-cyan/40 transition-colors shrink-0 group-focus-within:border-cyber-cyan/40" title="打开命令面板">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+              <span class="font-mono text-[10px] tracking-wider hidden sm:inline-block">Ctrl K</span>
+            </button>
+            <kbd class="font-mono text-[10px] text-cyber-dim2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 shrink-0 group-focus-within:hidden sm:hidden">/</kbd>
+          </div>
+
+          <button type="button" @click="openRandom" class="btn-random-group flex items-center justify-center w-[50px] h-[50px] bg-gradient-to-b from-[rgba(255,46,136,0.09)] to-[rgba(255,46,136,0.04)] border border-cyber-magenta/30 rounded-sm text-cyber-magenta hover:from-[rgba(255,46,136,0.18)] hover:to-[rgba(255,46,136,0.08)] hover:border-cyber-magenta hover:shadow-[0_0_24px_rgba(255,46,136,0.25)] hover:bg-[rgba(255,46,136,0.1)] active:scale-95 transition-all shrink-0" title="随机发现 (R)">
+            <svg class="w-[18px] h-[18px] random-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap p-2.5 bg-gradient-to-b from-[rgba(15,18,32,0.55)] to-[rgba(12,14,23,0.55)] border border-cyber-line rounded-sm backdrop-blur-sm">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto">
+            <span class="font-mono text-[9.5px] text-cyber-dim2 tracking-widest px-1 uppercase">预设</span>
+            <button @click="applyPreset({ lic: ['cc0','free-commercial'], reg: ['none'] })" class="whitespace-nowrap font-mono text-[10px] bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/20 px-2 py-1 rounded-sm hover:bg-cyber-cyan/20 transition-colors">🚀 直接商用</button>
+            <button @click="applyPreset({ type: ['2d'] })" class="whitespace-nowrap font-mono text-[10px] bg-cyber-lime/10 text-cyber-lime border border-cyber-lime/20 px-2 py-1 rounded-sm hover:bg-cyber-lime/20 transition-colors">🎨 2D 美术</button>
+            <button @click="applyPreset({ type: ['audio'] })" class="whitespace-nowrap font-mono text-[10px] bg-cyber-magenta/10 text-cyber-magenta border border-cyber-magenta/20 px-2 py-1 rounded-sm hover:bg-cyber-magenta/20 transition-colors">🔊 音频音效</button>
+          </div>
+          <div class="w-px h-[18px] bg-cyber-line2 mx-0.5 hidden sm:block"></div>
+
+          <!-- 排序按钮，加了 clearDragState -->
+          <div class="flex items-center gap-0.5 p-0.5 bg-black/25 border border-cyber-line rounded-sm">
+            <template x-for="s in [{k:'rec', l:'推荐'}, {k:'az', l:'A-Z'}]" :key="s.k">
+              <button @click="sort = s.k; currentPage = 1; clearDragState()" :class="sort === s.k ? 'bg-cyber-cyan text-[#02181a] font-bold shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'text-cyber-dim hover:text-cyber-text hover:bg-white/5'" class="font-mono text-[10.5px] px-2.5 py-1 rounded-sm transition-all" x-text="s.l"></button>
+            </template>
+          </div>
+
+          <!-- 视图切换按钮，加了 clearDragState -->
+          <div class="flex items-center gap-0.5 p-0.5 bg-black/25 border border-cyber-line rounded-sm">
+            <button @click="view = 'grid'; clearDragState()" :class="view === 'grid' ? 'bg-cyber-cyan text-[#02181a] shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'text-cyber-dim hover:text-cyber-text hover:bg-white/5'" class="p-1 rounded-sm transition-all"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+            <button @click="view = 'list'; clearDragState()" :class="view === 'list' ? 'bg-cyber-cyan text-[#02181a] shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'text-cyber-dim hover:text-cyber-text hover:bg-white/5'" class="p-1 rounded-sm transition-all"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+          </div>
+
+          <div class="ml-auto flex items-center gap-1.5">
+            <button @click="copyAll" class="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-cyber-line rounded-sm text-cyber-dim hover:text-cyber-cyan hover:border-cyber-cyan/40 hover:bg-cyber-cyan/5 transition-all" title="复制全部"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          </div>
+        </div>
+
+        <div class="relative z-30 flex items-center justify-between gap-3 flex-wrap font-mono text-[11px] tracking-wider px-0.5 min-h-[24px]">
+          <div class="flex items-center gap-2 text-cyber-dim shrink-0">
+            <div class="w-1.5 h-1.5 rounded-full bg-cyber-lime shadow-[0_0_10px_#c6ff00] animate-pulse"></div>
+            <span>MATCH <b class="text-cyber-lime font-medium" x-text="totalSites"></b> <span class="text-cyber-dim2">/</span> <span x-text="sites.length"></span></span>
+          </div>
+          <div class="flex-1 flex flex-wrap justify-center gap-1.5">
+            <template x-for="(vals, key) in activeFilters" :key="key">
+              <template x-for="v in vals" :key="v">
+                <button @click="toggleFilter(key, v)" :class="{ 'bg-[rgba(0,240,255,0.07)] border-[rgba(0,240,255,0.18)] text-cyber-cyan hover:bg-[rgba(0,240,255,0.14)] hover:border-cyber-cyan': key === 'types', 'bg-[rgba(198,255,0,0.07)] border-[rgba(198,255,0,0.18)] text-cyber-lime hover:bg-[rgba(198,255,0,0.14)] hover:border-cyber-lime': key === 'licenses', 'bg-[rgba(255,46,136,0.07)] border-[rgba(255,46,136,0.18)] text-cyber-magenta hover:bg-[rgba(255,46,136,0.14)] hover:border-cyber-magenta': key === 'registers' }" class="flex items-center gap-1 px-2 py-0.5 border rounded-sm text-[10px] transition-colors shrink-0">
+                  <span x-text="getLabel(key, v)"></span><span class="opacity-60 text-[11px] leading-none">×</span>
+                </button>
+              </template>
+            </template>
+            <template x-if="favOnly">
+              <button @click="favOnly = false" class="flex items-center gap-1 px-2 py-0.5 border border-cyber-gold/40 text-cyber-gold bg-cyber-gold/10 rounded-sm text-[10px] hover:bg-cyber-gold/20 transition-colors shrink-0">
+                <span>★ 收藏</span><span class="opacity-60 text-[11px] leading-none">×</span>
+              </button>
+            </template>
+          </div>
+          <button @click="resetAll" x-show="hasActiveFilters" x-transition class="bg-transparent border border-cyber-line2 rounded-sm text-cyber-dim hover:text-cyber-magenta hover:border-cyber-magenta/50 hover:bg-cyber-magenta/5 font-mono text-[10.5px] tracking-wider px-2.5 py-1 transition-all">RESET</button>
+        </div>
+      </header>
+
+      <div class="flex-1 relative flex flex-col">
+        <div x-show="displayedSites.length > 0" :class="view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3' : 'flex flex-col gap-1.5'" class="transition-all duration-300">
+
+          <template x-for="(site, i) in displayedSites" :key="site.url">
+            <a :href="site.url" target="_blank" rel="noopener noreferrer"
+               @click="addRecent(site)"
+               @mousemove="e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }"
+               :data-lic="site.license"
+               :draggable="isDragEnabled"
+               :class="[
+                 view === 'list' ? 'flex-row items-center px-4 py-2.5 gap-3' : 'flex-col px-4 py-4',
+                 isDragEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+               ]"
+               :style="`animation-delay: ${Math.min(i * 15, 300)}ms`"
+               class="cyber-card card-anim group flex rounded-sm text-inherit no-underline context-card"
+               @dragstart="handleDragStart($event, i)"
+               @dragend="handleDragEnd($event)"
+               @dragover.prevent="handleDragOver($event, i)"
+               @dragleave="handleDragLeave($event)"
+               @drop.prevent="handleDrop($event, i)"
+               @contextmenu.prevent.stop="openContextMenu($event, site)">
+
+              <span class="card-spotlight"></span>
+
+              <div x-show="view === 'grid'" class="flex flex-col h-full w-full relative z-10">
+                <!-- 重构后的顶部行：左侧序号，中间标签，右侧操作 -->
+                <div class="flex items-center gap-2 mb-2.5 w-full">
+                  <span class="font-mono text-[10px] text-cyber-dim2 tracking-widest shrink-0">// <b class="text-cyber-dim" x-text="String((currentPage - 1) * pageSize + i + 1).padStart(2, '0')"></b></span>
+
+                  <div class="ml-auto flex items-center gap-1 overflow-hidden justify-end">
+                    <span x-show="site.isNew" class="font-mono text-[8.5px] font-bold tracking-wider bg-cyber-violet/15 text-cyber-violet border border-cyber-violet/30 rounded-sm px-1.5 py-0.5 shrink-0">NEW</span>
+                    <span x-show="site.featured" class="font-mono text-[8.5px] font-bold tracking-wider bg-cyber-gold/15 text-cyber-gold border border-cyber-gold/30 rounded-sm px-1.5 py-0.5 shrink-0">★ 推荐</span>
+                    <span :class="{ 'bg-[rgba(0,240,255,0.14)] text-cyber-cyan border-[rgba(0,240,255,0.3)]': site.license === 'cc0', 'bg-[rgba(255,184,0,0.13)] text-cyber-amber border-[rgba(255,184,0,0.3)]': site.license === 'cc-by', 'bg-[rgba(198,255,0,0.12)] text-cyber-lime border-[rgba(198,255,0,0.28)]': site.license === 'free-commercial', 'bg-[rgba(255,46,136,0.12)] text-cyber-magenta border-[rgba(255,46,136,0.28)]': site.license === 'mixed' }" class="font-mono text-[9.5px] font-bold tracking-wider border rounded-sm px-1.5 py-0.5 whitespace-nowrap shrink-0" x-text="LICENSE_LABEL[site.license]"></span>
+                  </div>
+
+                  <!-- 独立操作区：星标 & 菜单 -->
+                  <div class="flex items-center gap-1 shrink-0 ml-1 pl-1.5 border-l border-cyber-line2">
+                    <button @click.prevent.stop="toggleFav(site)" :class="favorites.includes(site.url) ? 'text-cyber-gold' : 'text-cyber-dim2 hover:text-cyber-gold'" class="w-[22px] h-[22px] flex items-center justify-center rounded-sm hover:bg-cyber-gold/10 transition-colors p-0"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="favorites.includes(site.url) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+
+                    <button @click.prevent.stop="openContextMenu($event, site)" class="w-[22px] h-[22px] flex items-center justify-center rounded-sm text-cyber-dim2 hover:bg-cyber-cyan/20 hover:text-cyber-cyan transition-colors p-0 opacity-0 group-hover:opacity-100">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <h3 class="font-display text-[16.5px] font-bold text-white leading-tight mb-1 group-hover:text-cyber-cyan transition-colors" x-html="highlight(site.name)"></h3>
+                <div class="flex items-center gap-1.5 font-mono text-[10px] text-cyber-dim tracking-wide mb-2.5">
+                  <span x-text="getDomain(site.url)"></span><span class="w-0.5 h-0.5 rounded-full bg-cyber-dim2"></span><span class="text-cyber-dim2" x-text="REGISTER_LABEL[site.register]"></span>
+                </div>
+                <p class="font-display text-[12.5px] leading-relaxed text-[#8892a4] flex-1 mb-3 line-clamp-2" x-html="highlight(site.desc)"></p>
+                <div class="flex flex-wrap gap-1 mb-3.5">
+                  <template x-for="t in site.types" :key="t">
+                    <span @click.prevent.stop="toggleFilter('types', t)" class="font-mono text-[9.5px] tracking-wide bg-[rgba(0,240,255,0.07)] text-cyber-cyan border border-[rgba(0,240,255,0.14)] rounded-sm px-1.5 py-0.5 cursor-pointer hover:bg-[rgba(0,240,255,0.15)] hover:border-cyber-cyan transition-colors whitespace-nowrap" x-text="TYPE_LABEL[t]"></span>
+                  </template>
+                  <template x-for="tag in site.tags.slice(0, 3)" :key="tag">
+                    <span @click.prevent.stop="search = tag" class="font-mono text-[9.5px] tracking-wide bg-white/5 text-cyber-dim border border-transparent rounded-sm px-1.5 py-0.5 whitespace-nowrap cursor-pointer hover:bg-white/10 hover:text-cyber-text transition-colors" x-text="tag"></span>
+                  </template>
+                </div>
+                <div class="flex gap-1.5 pt-3 border-t border-white/5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all">
+                  <div class="flex-1 flex items-center justify-center gap-1.5 border border-cyber-line2 text-cyber-dim font-mono text-[10.5px] tracking-wider rounded-sm py-1.5 group-hover:text-cyber-cyan group-hover:border-cyber-cyan/45 group-hover:bg-cyber-cyan/5 transition-all">打开</div>
+                  <button @click.prevent="copyText(site.url)" class="flex-1 flex items-center justify-center gap-1.5 border border-cyber-line2 text-cyber-dim font-mono text-[10.5px] tracking-wider rounded-sm py-1.5 hover:text-cyber-lime hover:border-cyber-lime/45 hover:bg-cyber-lime/5 transition-all">复制</button>
+                </div>
+              </div>
+
+              <div x-show="view === 'list'" class="flex items-center gap-3 w-full relative z-10">
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span x-show="site.featured" class="w-1.5 h-1.5 rounded-full bg-cyber-gold shadow-[0_0_8px_#ffd166]" title="推荐"></span>
+                  <span :class="{ 'text-cyber-cyan': site.license === 'cc0', 'text-cyber-amber': site.license === 'cc-by', 'text-cyber-lime': site.license === 'free-commercial', 'text-cyber-magenta': site.license === 'mixed' }" class="font-mono text-[9.5px] font-bold tracking-wider whitespace-nowrap" x-text="LICENSE_LABEL[site.license]"></span>
+                </div>
+                <h3 class="font-display text-[14px] font-bold text-white group-hover:text-cyber-cyan transition-colors min-w-[150px] truncate" x-html="highlight(site.name)"></h3>
+                <div class="flex items-center gap-1.5 font-mono text-[10px] text-cyber-dim tracking-wide"><span x-text="getDomain(site.url)"></span><span class="w-0.5 h-0.5 rounded-full bg-cyber-dim2"></span><span class="text-cyber-dim2" x-text="REGISTER_LABEL[site.register]"></span></div>
+                <div class="ml-auto flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button @click.prevent="toggleFav(site)" :class="favorites.includes(site.url) ? 'text-cyber-gold' : 'text-cyber-dim hover:text-cyber-gold'" class="p-1 hover:bg-cyber-gold/10 rounded-sm transition-colors"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="favorites.includes(site.url) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+                  <button @click.prevent="copyText(site.url)" class="p-1 text-cyber-dim hover:text-cyber-lime hover:bg-cyber-lime/10 rounded-sm transition-colors"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button @click.prevent.stop="openContextMenu($event, site)" class="p-1 text-cyber-dim hover:text-cyber-cyan hover:bg-cyber-cyan/10 rounded-sm transition-colors"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+                </div>
+              </div>
+            </a>
+          </template>
+        </div>
+
+        <div x-show="displayedSites.length === 0" x-cloak class="flex flex-col items-center justify-center py-20 gap-4 text-center w-full flex-1">
+          <div class="empty-hud-panel">
+            <div class="corner-bl"></div>
+            <div class="corner-br"></div>
+            <div class="flex items-center justify-between border-b border-cyber-line pb-2.5 mb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full bg-cyber-magenta animate-pulse shadow-[0_0_8px_#ff2e88]"></div>
+                <span class="text-[10px] text-cyber-magenta tracking-widest font-bold">SYSTEM_ALERT</span>
+              </div>
+              <span class="text-[10px] text-cyber-dim2">tty0</span>
+            </div>
+            <div class="font-mono text-[12px] leading-relaxed text-left text-cyber-text">
+              <div class="text-cyber-dim2 select-none mb-1">$ query --status</div>
+              <div class="text-cyber-magenta">
+                <template x-if="favOnly && favorites.length === 0">
+                  <span>> ERR_0x454D505459 : EMPTY_COLLECTION</span>
+                </template>
+                <template x-if="!favOnly || favorites.length > 0">
+                  <span>> ERR_0x4E4F5F : NO_MATCH_FOUND</span>
+                </template>
+              </div>
+              <div class="text-cyber-dim mt-1">
+                <template x-if="favOnly && favorites.length === 0">
+                  <span>> 收藏库为空，请先添加收藏。</span>
+                </template>
+                <template x-if="!favOnly || favorites.length > 0">
+                  <span>> 没有匹配的条目，请检查输入。</span>
+                </template>
+              </div>
+              <div class="mt-4 flex items-center gap-1.5 text-[10px] text-cyber-cyan">
+                <span>等待输入_</span><span class="w-1.5 h-3 bg-cyber-cyan animate-pulse"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="font-mono text-[12px] tracking-widest text-cyber-dim mt-2">
+            <template x-if="favOnly && favorites.length === 0"><span>你还没有收藏任何素材 · <button @click="favOnly = false" class="text-cyber-cyan hover:underline">返回全部</button></span></template>
+            <template x-if="!favOnly || favorites.length > 0"><span>没有找到匹配的站点 · 试试 <button @click="resetAll" class="text-cyber-cyan hover:underline">放宽筛选</button> 或 <button @click="search = ''" class="text-cyber-cyan hover:underline">清空搜索</button></span></template>
+          </div>
+        </div>
+
+        <div x-show="totalSites > 0" x-cloak class="mt-8 flex flex-col sm:flex-row items-center justify-between border-t border-cyber-line pt-5 gap-4 font-mono text-[11px] text-cyber-dim tracking-wider">
+          <div class="flex items-center gap-3">
+            <span>每页显示</span>
+            <select x-model.number="pageSize" @change="currentPage = 1" class="bg-cyber-panel2 border border-cyber-line rounded-sm text-cyber-text px-2 py-1 outline-none cursor-pointer focus:border-cyber-cyan">
+              <option value="12">12</option>
+              <option value="24">24</option>
+              <option value="48">48</option>
+            </select>
+            <span>条，共 <b x-text="totalSites" class="text-cyber-cyan"></b> 条结果</span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="px-2.5 py-1 border border-cyber-line rounded-sm hover:border-cyber-cyan/50 hover:bg-cyber-cyan/10 hover:text-cyber-cyan disabled:opacity-30 disabled:pointer-events-none transition-all">&lt; PREV</button>
+            <template x-for="p in totalPages" :key="p">
+              <button x-show="p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1" @click="changePage(p)" :class="currentPage === p ? 'bg-cyber-cyan text-[#02181a] font-bold border-cyber-cyan shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'border-transparent text-cyber-dim hover:bg-white/5 hover:text-cyber-text'" class="w-7 h-7 flex items-center justify-center border rounded-sm transition-all" x-text="p"></button>
+            </template>
+            <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-2.5 py-1 border border-cyber-line rounded-sm hover:border-cyber-cyan/50 hover:bg-cyber-cyan/10 hover:text-cyber-cyan disabled:opacity-30 disabled:pointer-events-none transition-all">NEXT &gt;</button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="mt-auto pt-8 flex justify-between items-center flex-wrap gap-4 font-mono text-[10px] tracking-widest text-cyber-dim2 shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full bg-cyber-cyan shadow-[0_0_8px_#00f0ff]"></div>
+          ASSET//HUB · v22
+        </div>
+        <div class="flex items-center gap-4">
+          <button @click="openCmdPalette('help')" class="flex items-center gap-1.5 hover:text-cyber-cyan transition-colors">
+            <span class="border border-cyber-line2 rounded-sm px-1 bg-cyber-panel2 text-cyber-dim">?</span> 快捷键
+          </button>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- 万能命令面板 -->
+  <div x-show="showCmdPalette" x-cloak class="fixed inset-0 z-[10000] flex items-start justify-center pt-[15vh] px-4 bg-[rgba(3,4,8,0.7)] backdrop-blur-sm transition-opacity" @click="showCmdPalette = false">
+    <div @click.stop class="w-full max-w-[600px] bg-[rgba(12,14,23,0.95)] border border-cyber-cyan/40 rounded-md shadow-[0_0_50px_rgba(0,240,255,0.15),0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden font-mono flex flex-col">
+
+      <div class="flex items-center px-4 py-3 border-b border-cyber-line shrink-0">
+        <svg class="w-5 h-5 text-cyber-cyan mr-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path x-show="cmdMode === 'cmd'" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          <circle x-show="cmdMode === 'help'" cx="12" cy="12" r="10"/><path x-show="cmdMode === 'help'" d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x-show="cmdMode === 'help'" x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <input x-ref="cmdInput" x-model="cmdSearch" type="text"
+               :placeholder="cmdMode === 'help' ? '快捷键列表' : '输入搜索词或命令（输入 ? 查看快捷键）...'"
+               :readonly="cmdMode === 'help'"
+               @keydown.escape.prevent="showCmdPalette = false"
+               @keydown.down.prevent="navigateCmd(1)"
+               @keydown.up.prevent="navigateCmd(-1)"
+               @keydown.enter.prevent="executeSelectedCmd()"
+               @input="handleCmdInput"
+               class="flex-1 bg-transparent border-none outline-none text-white text-[15px] tracking-wide placeholder:text-cyber-dim2 cursor-default focus:outline-none" autocomplete="off" spellcheck="false">
+        <button @click="showCmdPalette = false" class="text-[10px] text-cyber-dim border border-cyber-line2 rounded-sm px-1.5 py-0.5 shrink-0 hover:text-cyber-magenta transition-colors">Esc</button>
+      </div>
+
+      <div class="max-h-[60vh] overflow-y-auto p-2">
+
+        <template x-if="cmdMode === 'cmd'">
+          <div>
+            <div x-show="filteredCommands.length > 0" class="mb-2">
+              <div class="text-[10px] text-cyber-dim tracking-widest px-2 py-1 uppercase">动作</div>
+              <template x-for="(cmd, idx) in filteredCommands" :key="cmd.id">
+                <div @click="executeCommand(cmd.action)"
+                     :class="cmdActiveIndex === idx ? 'bg-cyber-cyan/10 border-cyber-cyan/30 text-cyber-cyan' : 'border-transparent text-cyber-text hover:bg-white/5'"
+                     class="flex items-center gap-3 px-3 py-2.5 rounded-sm border cursor-pointer transition-colors"
+                     @mouseenter="cmdActiveIndex = idx">
+                  <div class="w-6 h-6 flex items-center justify-center rounded-sm bg-cyber-line/50 text-[10px] font-bold" x-text="cmd.icon"></div>
+                  <span class="text-[13px]" x-text="cmd.label"></span>
+                  <span x-show="cmd.shortcut" class="ml-auto text-[10px] text-cyber-dim2 border border-cyber-line px-1 rounded-sm" x-text="cmd.shortcut"></span>
+                </div>
+              </template>
+            </div>
+
+            <div x-show="cmdSearch.trim().length > 0 && filteredSitesForCmd.length > 0" class="mb-2">
+              <div class="text-[10px] text-cyber-dim tracking-widest px-2 py-1 uppercase">站点搜索</div>
+              <template x-for="(site, idx) in filteredSitesForCmd" :key="site.url">
+                <div @click="executeCommand('openUrl', site.url)"
+                     :class="cmdActiveIndex === (filteredCommands.length + idx) ? 'bg-cyber-cyan/10 border-cyber-cyan/30 text-cyber-cyan' : 'border-transparent text-cyber-text hover:bg-white/5'"
+                     class="flex items-center justify-between px-3 py-2 rounded-sm border cursor-pointer transition-colors"
+                     @mouseenter="cmdActiveIndex = filteredCommands.length + idx">
+                  <div class="flex items-center gap-3">
+                    <div class="w-6 h-6 flex items-center justify-center rounded-sm bg-cyber-magenta/10 text-cyber-magenta text-[10px]">🔗</div>
+                    <span class="text-[13px]" x-text="site.name"></span>
+                  </div>
+                  <span class="text-[10px] text-cyber-dim" x-text="getDomain(site.url)"></span>
+                </div>
+              </template>
+            </div>
+
+            <div x-show="filteredCommands.length === 0 && filteredSitesForCmd.length === 0" class="py-10 text-center text-cyber-dim text-[12px]">
+              没有找到相关命令或站点
+            </div>
+          </div>
+        </template>
+
+        <template x-if="cmdMode === 'help'">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-3">
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">命令面板</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">Ctrl + K</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">聚焦搜索</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">/</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">随机打开</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">R</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">网格视图</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">G</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">列表视图</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">L</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">只看收藏</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">S</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">打开快捷键列表</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">?</kbd></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-cyber-text text-[12px]">打开首个/关闭</span><kbd class="text-cyber-dim2 bg-cyber-panel2 border border-cyber-line2 rounded-sm px-1.5 py-0.5 text-[10px]">Enter / Esc</kbd></div>
+          </div>
+        </template>
+
+      </div>
+
+      <div class="px-4 py-2 border-t border-cyber-line bg-black/20 text-[10px] text-cyber-dim2 flex justify-between items-center shrink-0">
+        <span x-text="cmdMode === 'help' ? '按 Esc 返回' : '按 ↑↓ 选择，Enter 确认'"></span>
+        <span x-show="cmdMode === 'cmd'">按 <kbd class="text-cyber-dim">?</kbd> 查看快捷键</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div x-show="contextMenu.show" x-cloak
+       x-transition.opacity.duration.150ms
+       class="fixed z-[20000] w-52 bg-[rgba(12,14,23,0.95)] border border-cyber-cyan/50 rounded-sm shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(0,240,255,0.15)] backdrop-blur-md overflow-hidden font-mono text-[11px]"
+       :style="`left: ${contextMenu.x}px; top: ${contextMenu.y}px;`"
+       @contextmenu.prevent
+       @click.stop>
+    <div class="bg-cyber-cyan/10 text-cyber-cyan px-3 py-1.5 border-b border-cyber-cyan/20 font-bold flex items-center gap-1.5 overflow-hidden">
+      <div class="w-1 h-3 bg-cyber-cyan shrink-0"></div>
+      <span class="truncate" x-text="contextMenu.site?.name"></span>
+    </div>
+
+    <div class="p-1 flex flex-col gap-0.5">
+      <button @click="executeContextAction('open')" class="flex items-center gap-2 px-2.5 py-1.5 text-cyber-text hover:bg-cyber-cyan/20 hover:text-cyber-cyan rounded-sm transition-colors text-left">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>
+        打开站点
+      </button>
+      <button @click="executeContextAction('copy')" class="flex items-center gap-2 px-2.5 py-1.5 text-cyber-text hover:bg-cyber-cyan/20 hover:text-cyber-lime rounded-sm transition-colors text-left">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        复制链接
+      </button>
+      <button @click="executeContextAction('fav')" class="flex items-center gap-2 px-2.5 py-1.5 text-cyber-text hover:bg-cyber-gold/20 hover:text-cyber-gold rounded-sm transition-colors text-left">
+        <span class="text-[13px]" :class="favorites.includes(contextMenu.site?.url) ? 'text-cyber-gold' : ''">★</span>
+        <span x-text="favorites.includes(contextMenu.site?.url) ? '取消收藏' : '加入收藏'"></span>
+      </button>
+      <div class="h-px bg-cyber-line my-1 mx-1"></div>
+      <button @click="executeContextAction('google')" class="flex items-center gap-2 px-2.5 py-1.5 text-cyber-dim hover:bg-cyber-line hover:text-cyber-text rounded-sm transition-colors text-left">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+        搜索该站点
+      </button>
+    </div>
+  </div>
+
+  <div x-data="{ show: false, msg: '', type: 'ok' }" @toast.window="msg = $event.detail.msg; type = $event.detail.type || 'ok'; show = true; setTimeout(() => show = false, 1900)" x-show="show" x-transition.opacity.duration.250ms :class="type === 'warn' ? 'border-cyber-magenta text-cyber-magenta shadow-[0_0_30px_rgba(255,46,136,0.22)]' : (type === 'ok' ? 'border-cyber-lime text-cyber-lime shadow-[0_0_30px_rgba(198,255,0,0.22)]' : 'border-cyber-cyan text-cyber-cyan shadow-[0_0_30px_rgba(0,240,255,0.22)]')" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] font-mono text-[11.5px] tracking-widest px-5 py-2.5 rounded-sm bg-[rgba(12,14,23,0.96)] border shadow-2xl max-w-[90vw] truncate" x-text="msg" x-cloak></div>
+
+  <script>
+    const SITES = [
+      { name:"Kenney", url:"https://kenney.nl/assets", desc:"独立游戏素材之王，2D/3D/音频/UI 全套打包，风格统一，几乎可直接上架。", types:["2d","3d","audio","ui"], license:"cc0", register:"none", tags:["像素","低多边形","UI套件"], featured:true, addedAt: "2024-01-10" },
+      { name:"OpenGameArt", url:"https://opengameart.org", desc:"老牌开源游戏素材社区，2D/3D/音效/音乐齐全，许可证混杂需逐项查看。", types:["2d","3d","audio","ui"], license:"mixed", register:"optional", tags:["社区","海量","历史悠久"], addedAt: "2023-05-15" },
+      { name:"itch.io Free Assets", url:"https://itch.io/game-assets/free", desc:"独立开发者素材集市的免费区，像素/手绘/3D 风格活跃，更新最快。", types:["2d","3d","audio","ui"], license:"mixed", register:"optional", tags:["独立","活跃","风格多样"], featured:true, addedAt: new Date().toISOString() },
+      { name:"CraftPix", url:"https://craftpix.net/freebies/", desc:"高质量 2D 游戏素材与 UI，免费区需注册，适合横版 / 塔防 / RPG。", types:["2d","ui"], license:"free-commercial", register:"required", tags:["2D","UI","横版"], addedAt: "2023-11-01" },
+      { name:"GameArt2D", url:"https://www.gameart2d.com/freebies.html", desc:"经典 2D 角色与场景素材包，平台跳跃与 RPG 向，免费区需注册。", types:["2d"], license:"free-commercial", register:"required", tags:["角色","场景","平台跳跃"], addedAt: "2023-08-20" },
+      { name:"Screaming Brain Studios", url:"https://screamingbrainstudios.com/downloads/", desc:"CC0 2D 素材包，含角色、环境、UI 元素，风格统一适合原型。", types:["2d","ui"], license:"cc0", register:"none", tags:["CC0","原型","角色"], addedAt: new Date(Date.now() - 2*24*60*60*1000).toISOString() },
+      { name:"Superpowers Asset Packs", url:"https://github.com/sparklinlabs/superpowers-asset-packs", desc:"开源 2D 素材合集，含角色、场景、道具，CC0 授权可直接商用。", types:["2d"], license:"cc0", register:"none", tags:["开源","CC0","合集"], addedAt: "2023-02-14" },
+      { name:"Poly Haven", url:"https://polyhaven.com", desc:"顶级 CC0 3D 资产库：模型 / HDRI / 纹理，摄影棚级质量，全部免注册。", types:["3d","texture"], license:"cc0", register:"none", tags:["HDRI","PBR","写实"], featured:true, addedAt: "2024-01-01" },
+      { name:"ambientCG", url:"https://ambientcg.com", desc:"海量 PBR 材质、HDRI 与 3D 模型，全部 CC0，可直接商用。", types:["texture","3d"], license:"cc0", register:"none", tags:["PBR","材质","HDRI"], featured:true, addedAt: "2023-09-10" },
+      { name:"Quaternius", url:"https://quaternius.com", desc:"低多边形 3D 模型合集，风格统一、面数友好，CC0 全部免费。", types:["3d"], license:"cc0", register:"none", tags:["低多边形","卡通","游戏向"], addedAt: "2024-03-12" },
+      { name:"KayKit", url:"https://kaylousberg.itch.io", desc:"Kay Lousberg 的模块化 3D 素材包，角色 / 地牢 / 城堡，CC0。", types:["3d"], license:"cc0", register:"optional", tags:["模块化","角色","地牢"], addedAt: "2023-12-05" },
+      { name:"Poly Pizza", url:"https://poly.pizza", desc:"低多边形 3D 模型搜索引擎，聚合多个 CC0 / CC-BY 来源。", types:["3d"], license:"mixed", register:"optional", tags:["搜索引擎","低多边形"], addedAt: "2023-07-22" },
+      { name:"Sketchfab Free", url:"https://sketchfab.com/3d-models?features=downloadable", desc:"全球最大 3D 模型社区，勾选 Downloadable + Free 即可筛选可下载资源。", types:["3d"], license:"mixed", register:"required", tags:["社区","海量","需筛选"], addedAt: "2023-04-10" },
+      { name:"Mixamo", url:"https://www.mixamo.com", desc:"Adobe 免费角色动画与绑定库，数千个动作可直接套用到人形模型。", types:["3d"], license:"free-commercial", register:"required", tags:["动画","骨骼","角色"], addedAt: "2023-06-15" },
+      { name:"Freesound", url:"https://freesound.org", desc:"海量音效与氛围声，CC 许可混合，需注册下载，注意区分 NC 条款。", types:["audio"], license:"mixed", register:"required", tags:["音效","氛围","CC"], addedAt: "2023-01-20" },
+      { name:"Sonniss GDC Audio", url:"https://sonniss.com/gameaudiogdc", desc:"每年 GDC 免费放出的数十 GB 专业音效包，免版税可商用。", types:["audio"], license:"free-commercial", register:"none", tags:["专业","大包","免版税"], addedAt: "2024-03-01" },
+      { name:"ZapSplat", url:"https://www.zapsplat.com", desc:"免费音效与音乐库，分类清晰，免费账户需署名，付费可免。", types:["audio"], license:"free-commercial", register:"required", tags:["音效","音乐","分类清晰"], addedAt: "2023-10-11" },
+      { name:"BBC Sound Effects", url:"https://sound-effects.bbcrewind.co.uk", desc:"BBC 历史音效档案，仅限个人 / 教育用途，商用需单独授权。", types:["audio"], license:"mixed", register:"none", tags:["档案","写实","非商用"], addedAt: "2023-08-01" },
+      { name:"Free Music Archive", url:"https://freemusicarchive.org", desc:"免费音乐档案库，CC 许可混合，适合背景音乐与主题曲。", types:["audio"], license:"mixed", register:"optional", tags:["音乐","CC","背景"], addedAt: "2023-11-20" },
+      { name:"Incompetech", url:"https://incompetech.com/music/royalty-free/", desc:"Kevin MacLeod 的免版税音乐库，CC-BY 署名即可商用，曲风极广。", types:["audio"], license:"cc-by", register:"none", tags:["音乐","免版税","曲风广"], addedAt: "2023-03-05" },
+      { name:"PlayOnLoop", url:"https://www.playonloop.com", desc:"免费游戏音效与循环音乐，免版税，适合快速补音频。", types:["audio"], license:"free-commercial", register:"none", tags:["音效","循环","免版税"], addedAt: "2023-12-15" },
+      { name:"NCS", url:"https://ncs.io", desc:"NoCopyrightSounds 免费电子音乐库，使用时需按频道规范署名。", types:["audio"], license:"free-commercial", register:"none", tags:["电子","免费","署名"], addedAt: "2023-09-30" },
+      { name:"Google Fonts", url:"https://fonts.google.com", desc:"开源字体库，全部可免费商用，支持中文 / 多语言子集。", types:["font"], license:"free-commercial", register:"none", tags:["开源","多语言","商用"], featured:true, addedAt: "2023-05-01" },
+      { name:"Font Squirrel", url:"https://www.fontsquirrel.com", desc:"精选免费商用字体，每款均标注许可，适合游戏 UI 与标题。", types:["font"], license:"free-commercial", register:"none", tags:["精选","UI","标题"], addedAt: "2023-07-10" },
+      { name:"Game-icons.net", url:"https://game-icons.net", desc:"4000+ 游戏图标，SVG 格式可改色，CC-BY 署名即可商用。", types:["icon"], license:"cc-by", register:"none", tags:["SVG","图标","可改色"], featured:true, addedAt: "2023-02-28" },
+      { name:"Fontawesome", url:"https://fontawesome.com", desc:"主流图标库，免费版含 2000+ 图标，SVG / 字体均可，需按版本条款使用。", types:["icon"], license:"mixed", register:"none", tags:["图标","字体","免费版"], addedAt: "2023-08-15" },
+      { name:"Heroicons", url:"https://heroicons.com", desc:"Tailwind 团队出品的 SVG 图标集，MIT 许可，风格干净利落。", types:["icon"], license:"free-commercial", register:"none", tags:["SVG","MIT","Tailwind"], addedAt: "2023-10-05" },
+      { name:"Bootstrap Icons", url:"https://icons.getbootstrap.com", desc:"Bootstrap 官方图标库，1800+ SVG 图标，MIT 许可可商用。", types:["icon"], license:"free-commercial", register:"none", tags:["SVG","MIT","官方"], addedAt: "2023-06-20" },
+      { name:"Lospec", url:"https://lospec.com/palette-list", desc:"像素艺术调色板数据库，数千套社区配色，可直接下载 .hex / .pal。", types:["palette"], license:"free-commercial", register:"none", tags:["像素","配色","社区"], featured:true, addedAt: "2023-04-25" },
+      { name:"Coolors", url:"https://coolors.co", desc:"快速配色生成器，可导出多种格式，做 UI 与关卡氛围很顺手。", types:["palette"], license:"free-commercial", register:"optional", tags:["配色","生成器","UI"], addedAt: "2023-09-12" },
+      { name:"Texture Ninja", url:"https://texture.ninja", desc:"CC0 高清纹理素材，无需注册，适合快速补材质。", types:["texture"], license:"cc0", register:"none", tags:["纹理","CC0","高清"], addedAt: "2023-12-01" },
+      { name:"3D Textures", url:"https://3dtextures.me", desc:"免费 PBR 材质库，含法线 / 粗糙度贴图，CC0 授权。", types:["texture"], license:"cc0", register:"none", tags:["PBR","材质","CC0"], addedAt: "2023-11-15" },
+      { name:"ShareTextures", url:"https://www.sharetextures.com", desc:"社区共享纹理库，CC0 为主，含建筑 / 地面 / 自然材质。", types:["texture"], license:"cc0", register:"none", tags:["社区","建筑","自然"], addedAt: "2023-08-08" },
+      { name:"CG Bookcase", url:"https://www.cgbookcase.com", desc:"免费 PBR 纹理库，CC0 授权，质量稳定，更新较频繁。", types:["texture"], license:"cc0", register:"none", tags:["PBR","CC0","稳定"], addedAt: "2023-07-04" },
+      { name:"Subtle Patterns", url:"https://www.toptal.com/designers/subtlepatterns/", desc:"经典无缝背景纹理库，适合 UI 背景与界面点缀。", types:["texture"], license:"free-commercial", register:"none", tags:["无缝","背景","UI"], addedAt: "2023-03-22" },
+      { name:"Pixabay", url:"https://pixabay.com", desc:"综合免费图库，含插画 / 矢量 / 音效，Pixabay 许可可商用。", types:["2d","vector","audio"], license:"free-commercial", register:"optional", tags:["图库","插画","音效"], addedAt: "2023-05-30" },
+      { name:"Openclipart", url:"https://openclipart.org", desc:"公共领域矢量剪贴画，SVG 可自由修改，适合做 UI 与图标。", types:["vector","icon"], license:"cc0", register:"none", tags:["SVG","剪贴画","公共领域"], addedAt: "2023-01-10" },
+      { name:"SVGRepo", url:"https://www.svgrepo.com", desc:"海量 SVG 图标与矢量图聚合，支持按许可筛选，混合授权。", types:["icon","vector"], license:"mixed", register:"none", tags:["SVG","聚合","图标"], addedAt: "2023-10-20" },
+      { name:"Iconmonstr", url:"https://iconmonstr.com", desc:"极简风格图标库，数千个线性 / 实心图标，免费商用。", types:["icon"], license:"free-commercial", register:"none", tags:["极简","线性","商用"], addedAt: "2023-06-05" },
+      { name:"Vecteezy", url:"https://www.vecteezy.com/free-vector", desc:"免费矢量素材区，海量插画与图标，需注册并遵循署名规则。", types:["vector"], license:"mixed", register:"required", tags:["矢量","插画","需署名"], addedAt: "2023-09-25" },
+      { name:"GameDev Market Free", url:"https://www.gamedevmarket.net/category/free", desc:"独立素材市场免费分类，2D/3D/音频均有，需注册下载。", types:["2d","3d","audio"], license:"mixed", register:"required", tags:["市场","独立","分类全"], addedAt: "2023-12-10" },
+      { name:"Unity Asset Store Free", url:"https://assetstore.unity.com/?free=true&orderBy=1", desc:"Unity 官方商店免费筛选，含模型 / 特效 / 工具，注意引擎绑定条款。", types:["2d","3d","audio","ui"], license:"mixed", register:"required", tags:["Unity","官方","特效"], addedAt: "2023-08-18" },
+      { name:"Textures.com Free", url:"https://www.textures.com/free", desc:"专业纹理站免费额度，每日限量下载，写实材质质量高。", types:["texture"], license:"mixed", register:"required", tags:["写实","专业","限量"], addedAt: "2023-11-08" }
+    ];
+
+    const TYPE_LABEL     = { "2d":"2D 美术","3d":"3D 模型","audio":"音频","ui":"UI 界面","font":"字体","icon":"图标","texture":"纹理","palette":"调色板","vector":"矢量" };
+    const LICENSE_LABEL  = { "cc0":"CC0","cc-by":"CC BY","free-commercial":"免费商用","mixed":"混合许可" };
+    const REGISTER_LABEL = { "none":"免注册","optional":"可选注册","required":"需注册" };
+
+    function assetHub() {
+      return {
+        sites: SITES,
+        search: '',
+        favOnly: false,
+        showCmdPalette: false,
+        cmdMode: 'cmd',
+        cmdSearch: '',
+        cmdActiveIndex: 0,
+        favorites: JSON.parse(localStorage.getItem('ah_favs') || '[]'),
+        recentSites: JSON.parse(localStorage.getItem('ah_recent') || '[]'),
+
+        activeFilters: { types: [], licenses: [], registers: [] },
+        sort: 'rec',
+        view: 'grid',
+        currentPage: 1,
+        pageSize: 12,
+
+        randomTimeout: null,
+
+        contextMenu: { show: false, x: 0, y: 0, site: null },
+        isDragging: false,
+        draggedIndex: -1,
+        customOrder: JSON.parse(localStorage.getItem('ah_custom_order') || '[]'),
+
+        TYPE_LABEL, LICENSE_LABEL, REGISTER_LABEL,
+        filterDefs: [
+          { key: 'types', cn: '类型', opts: TYPE_LABEL },
+          { key: 'licenses', cn: '许可', opts: LICENSE_LABEL },
+          { key: 'registers', cn: '注册', opts: REGISTER_LABEL }
+        ],
+
+        commands: [
+          { id: 'view-grid', label: '切换到网格视图', action: 'grid', icon: 'G', shortcut: 'G' },
+          { id: 'view-list', label: '切换到列表视图', action: 'list', icon: 'L', shortcut: 'L' },
+          { id: 'random', label: '随机打开一个站点', action: 'random', icon: '🎲', shortcut: 'R' },
+          { id: 'toggle-fav', label: '切换只看收藏', action: 'fav', icon: '★' },
+          { id: 'reset', label: '清空所有筛选和搜索', action: 'reset', icon: '×' },
+          { id: 'preset-commercial', label: '应用预设：直接商用', action: 'preset-commercial', icon: '🚀' },
+          { id: 'preset-2d', label: '应用预设：2D 美术', action: 'preset-2d', icon: '🎨' },
+          { id: 'preset-audio', label: '应用预设：音频音效', action: 'preset-audio', icon: '🔊' },
+        ],
+
+        init() {
+          const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+          const now = new Date().getTime();
+          this.sites.forEach(site => {
+            if (site.addedAt) {
+              const addedTime = new Date(site.addedAt).getTime();
+              site.isNew = (now - addedTime) < SEVEN_DAYS;
+            } else {
+              site.isNew = false;
+            }
+          });
+
+          if (this.customOrder.length > 0) {
+            this.sites.sort((a, b) => {
+              const idxA = this.customOrder.indexOf(a.url);
+              const idxB = this.customOrder.indexOf(b.url);
+              if (idxA === -1 && idxB === -1) return 0;
+              if (idxA === -1) return 1;
+              if (idxB === -1) return -1;
+              return idxA - idxB;
+            });
+          }
+
+          this.parseHash();
+          this.$watch('activeFilters', () => { this.currentPage = 1; this.syncHash(); }, { deep: true });
+          this.$watch('search', () => { this.currentPage = 1; this.syncHash(); });
+          this.$watch('favOnly', () => { this.currentPage = 1; this.syncHash(); });
+
+          window.addEventListener('keydown', (e) => {
+            const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+              e.preventDefault();
+              this.openCmdPalette('cmd');
+              return;
+            }
+
+            if (this.showCmdPalette) {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                this.showCmdPalette = false;
+              }
+              return;
+            }
+
+            if (e.key === '?' && !isTyping) {
+              e.preventDefault();
+              this.openCmdPalette('help');
+              return;
+            }
+
+            if (e.key === '/' && !isTyping) { e.preventDefault(); this.$refs.searchInput.focus(); }
+            if (e.key === 'Escape') {
+              if (isTyping) document.activeElement.blur();
+              if (this.search) this.search = '';
+              else if (this.hasActiveFilters) this.resetAll();
+              this.closeContextMenu();
+            }
+            if (e.key === 'Enter' && isTyping && document.activeElement.id === 'searchInput') {
+              if (this.totalSites > 0) {
+                this.toast('打开首个结果 · ' + this.filteredSites[0].name, 'ok');
+                setTimeout(() => window.open(this.filteredSites[0].url, '_blank'), 300);
+              }
+            }
+            if (e.key.toLowerCase() === 'r' && !isTyping && !e.repeat) this.openRandom();
+            if (e.key.toLowerCase() === 'g' && !isTyping) this.view = 'grid';
+            if (e.key.toLowerCase() === 'l' && !isTyping) this.view = 'list';
+            if (e.key.toLowerCase() === 's' && !isTyping) this.favOnly = !this.favOnly;
+          });
+
+          // 兜底：只要用户在任何地方松开鼠标结束拖拽，立刻清理所有拖拽状态
+          window.addEventListener('dragend', () => {
+            this.isDragging = false;
+            this.draggedIndex = -1;
+            document.querySelectorAll('.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+            document.querySelectorAll('.drag-target').forEach(el => el.classList.remove('drag-target'));
+          });
+        },
+
+        // 新增：计算属性判断当前是否允许拖拽
+        get isDragEnabled() {
+          return this.sort === 'rec' && !this.search && !this.hasActiveFilters;
+        },
+
+        // ==========================================
+        // 🚀 拖拽排序逻辑 (视觉与交互优化)
+        // ==========================================
+        handleDragStart(e, i) {
+          if (!this.isDragEnabled) {
+            e.preventDefault();
+            return;
+          }
+          this.isDragging = true;
+          this.draggedIndex = i;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', i);
+
+          setTimeout(() => e.target.classList.add('is-dragging'), 0);
+        },
+
+        handleDragEnd(e) {
+          this.isDragging = false;
+          e.target.classList.remove('is-dragging');
+          document.querySelectorAll('.drag-target').forEach(el => el.classList.remove('drag-target'));
+        },
+
+        handleDragOver(e, i) {
+          if (!this.isDragging || this.draggedIndex === i) return;
+          e.currentTarget.classList.add('drag-target');
+        },
+
+        handleDragLeave(e) {
+          e.currentTarget.classList.remove('drag-target');
+        },
+
+        handleDrop(e, targetIndex) {
+          e.currentTarget.classList.remove('drag-target');
+          if (!this.isDragging || this.draggedIndex === -1 || this.draggedIndex === targetIndex) return;
+
+          let currentList = [...this.displayedSites];
+          const startIdx = this.draggedIndex;
+
+          const item = currentList.splice(startIdx, 1)[0];
+          currentList.splice(targetIndex, 0, item);
+
+          const newGlobalOrder = [...this.customOrder];
+          if (newGlobalOrder.length === 0) {
+            this.sites.forEach(s => newGlobalOrder.push(s.url));
+          }
+
+          const pageStartOffset = (this.currentPage - 1) * this.pageSize;
+          currentList.forEach((site, idx) => {
+            const globalIdx = newGlobalOrder.indexOf(site.url);
+            const tIdx = pageStartOffset + idx;
+            if (globalIdx !== -1 && tIdx < newGlobalOrder.length) {
+              const tmp = newGlobalOrder[tIdx];
+              newGlobalOrder[tIdx] = newGlobalOrder[globalIdx];
+              newGlobalOrder[globalIdx] = tmp;
+            }
+          });
+
+          this.customOrder = newGlobalOrder;
+          localStorage.setItem('ah_custom_order', JSON.stringify(this.customOrder));
+
+          this.sites.sort((a, b) => {
+            return this.customOrder.indexOf(a.url) - this.customOrder.indexOf(b.url);
+          });
+
+          this.toast('自定义排序已保存', 'ok');
+        },
+
+        // 新增：清理拖拽状态的方法，用于切换视图或排序时
+        clearDragState() {
+          this.isDragging = false;
+          this.draggedIndex = -1;
+          document.querySelectorAll('.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+          document.querySelectorAll('.drag-target').forEach(el => el.classList.remove('drag-target'));
+        },
+
+        // ==========================================
+        // 🚀 右键菜单逻辑
+        // ==========================================
+        openContextMenu(e, site) {
+          const menuWidth = 208; // w-52
+          const menuHeight = 160;
+
+          let x = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+          let y = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+
+          if (x + menuWidth > window.innerWidth) x -= menuWidth;
+          if (y + menuHeight > window.innerHeight) y -= menuHeight;
+
+          this.contextMenu = { show: true, x, y, site };
+        },
+
+        closeContextMenu() {
+          if (this.contextMenu.show) {
+            this.contextMenu.show = false;
+          }
+        },
+
+        executeContextAction(action) {
+          const site = this.contextMenu.site;
+          if (!site) return;
+          this.closeContextMenu();
+
+          switch (action) {
+            case 'open':
+              this.addRecent(site);
+              window.open(site.url, '_blank');
+              break;
+            case 'copy':
+              this.copyText(site.url);
+              break;
+            case 'fav':
+              this.toggleFav(site);
+              break;
+            case 'google':
+              window.open(`https://www.google.com/search?q=${encodeURIComponent(site.name)}`, '_blank');
+              break;
+          }
+        },
+
+        openRandom() {
+          if (this.randomTimeout) return;
+          this.randomTimeout = setTimeout(() => { this.randomTimeout = null; }, 500);
+
+          if (this.totalSites === 0) return this.toast('当前筛选结果为空', 'warn');
+
+          const pick = this.filteredSites[Math.floor(Math.random() * this.filteredSites.length)];
+          this.toast(`🎲 命中 · ${pick.name}`, 'ok');
+          window.open(pick.url, '_blank');
+        },
+
+        // 下方逻辑保持不变...
+        openCmdPalette(mode = 'cmd') { this.cmdMode = mode; this.showCmdPalette = true; this.cmdSearch = ''; this.cmdActiveIndex = 0; this.$nextTick(() => { if (this.$refs.cmdInput) this.$refs.cmdInput.focus(); }); },
+        handleCmdInput(e) { if (this.cmdSearch.trim() === '?' || this.cmdSearch.trim().toLowerCase() === 'help') { this.cmdMode = 'help'; this.cmdSearch = ''; } },
+        navigateCmd(dir) { if (this.cmdMode === 'help') return; const total = this.filteredCommands.length + this.filteredSitesForCmd.length; if (total === 0) return; this.cmdActiveIndex += dir; if (this.cmdActiveIndex < 0) this.cmdActiveIndex = total - 1; if (this.cmdActiveIndex >= total) this.cmdActiveIndex = 0; },
+        executeSelectedCmd() { if (this.cmdMode === 'help') return; if (this.cmdActiveIndex < this.filteredCommands.length) { this.executeCommand(this.filteredCommands[this.cmdActiveIndex].action); } else { const siteIdx = this.cmdActiveIndex - this.filteredCommands.length; if (this.filteredSitesForCmd[siteIdx]) { this.executeCommand('openUrl', this.filteredSitesForCmd[siteIdx].url); } } },
+        changePage(p) { if (p >= 1 && p <= this.totalPages) { this.currentPage = p; window.scrollTo({ top: 0, behavior: 'smooth' }); } },
+        get totalSites() { return this.filteredSites.length; },
+        get totalPages() { return Math.ceil(this.totalSites / this.pageSize) || 1; },
+
+        syncHash() {
+          const params = new URLSearchParams();
+          if (this.search) params.set('q', this.search);
+          if (this.favOnly) params.set('fav', '1');
+          Object.entries(this.activeFilters).forEach(([key, arr]) => { if (arr.length > 0) params.set(key, arr.join(',')); });
+          const newHash = params.toString();
+          history.replaceState(null, '', newHash ? '#' + newHash : window.location.pathname + window.location.search);
+        },
+
+        parseHash() {
+          const hash = window.location.hash.slice(1);
+          if (!hash) return;
+          const params = new URLSearchParams(hash);
+          if (params.has('q')) this.search = params.get('q');
+          if (params.has('fav')) this.favOnly = params.get('fav') === '1';
+          ['types', 'licenses', 'registers'].forEach(key => {
+            if (params.has(key)) this.activeFilters[key] = params.get(key).split(',');
+          });
+        },
+
+        applyPreset(preset) {
+          this.resetAll();
+          if (preset.type) this.activeFilters.types = [...preset.type];
+          if (preset.lic) this.activeFilters.licenses = [...preset.lic];
+          if (preset.reg) this.activeFilters.registers = [...preset.reg];
+          this.toast('已应用快捷预设', 'ok');
+        },
+
+        get filteredSites() {
+          const queryParts = this.search.toLowerCase().split(/\s+/).filter(Boolean);
+
+          let results = this.sites.filter(site => {
+            if (this.favOnly && !this.favorites.includes(site.url)) return false;
+            if (this.activeFilters.types.length > 0 && !site.types.some(t => this.activeFilters.types.includes(t))) return false;
+            if (this.activeFilters.licenses.length > 0 && !this.activeFilters.licenses.includes(site.license)) return false;
+            if (this.activeFilters.registers.length > 0 && !this.activeFilters.registers.includes(site.register)) return false;
+
+            if (queryParts.length > 0) {
+              const haystack = `${site.name} ${site.desc} ${site.tags.join(' ')} ${site.url}`.toLowerCase();
+              if (!queryParts.every(part => haystack.includes(part))) return false;
+            }
+            return true;
+          });
+
+          if (queryParts.length > 0) {
+            results = results.map(site => {
+              let score = 0;
+              const nameStr = site.name.toLowerCase();
+              const tagsStr = site.tags.join(' ').toLowerCase();
+              const descStr = site.desc.toLowerCase();
+
+              queryParts.forEach(part => {
+                if (nameStr === part) score += 50;
+                else if (nameStr.includes(part)) score += 20;
+                if (tagsStr.includes(part)) score += 10;
+                if (descStr.includes(part)) score += 2;
+              });
+              return { site, score };
+            }).sort((a, b) => b.score - a.score).map(item => item.site);
+          } else {
+            // 修复：A-Z 排序优先级最高，不被 customOrder 覆盖
+            if (this.sort === 'az') {
+              results.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (this.sort === 'rec') {
+              if (this.customOrder.length > 0) {
+                results.sort((a, b) => {
+                  const idxA = this.customOrder.indexOf(a.url);
+                  const idxB = this.customOrder.indexOf(b.url);
+                  if (idxA === -1 && idxB === -1) return 0;
+                  if (idxA === -1) return 1;
+                  if (idxB === -1) return -1;
+                  return idxA - idxB;
+                });
+              } else {
+                results.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || a.name.localeCompare(b.name));
+              }
+            }
+          }
+
+          return results;
+        },
+
+        get displayedSites() { const start = (this.currentPage - 1) * this.pageSize; return this.filteredSites.slice(start, start + this.pageSize); },
+        get hasActiveFilters() { return this.search || this.favOnly || Object.values(this.activeFilters).some(arr => arr.length > 0); },
+        get filteredCommands() { if (!this.cmdSearch.trim()) return this.commands; const q = this.cmdSearch.toLowerCase(); return this.commands.filter(c => c.label.toLowerCase().includes(q)); },
+        get filteredSitesForCmd() { if (!this.cmdSearch.trim()) return []; const q = this.cmdSearch.toLowerCase(); return this.sites.filter(s => s.name.toLowerCase().includes(q) || s.tags.join(' ').toLowerCase().includes(q)).slice(0, 5); },
+
+        executeCommand(action, payload) {
+          this.showCmdPalette = false;
+          switch (action) {
+            case 'grid': this.view = 'grid'; this.clearDragState(); this.toast('已切换到网格视图'); break;
+            case 'list': this.view = 'list'; this.clearDragState(); this.toast('已切换到列表视图'); break;
+            case 'random': this.openRandom(); break;
+            case 'fav': this.favOnly = !this.favOnly; break;
+            case 'reset': this.resetAll(); break;
+            case 'preset-commercial': this.applyPreset({ lic: ['cc0','free-commercial'], reg: ['none'] }); break;
+            case 'preset-2d': this.applyPreset({ type: ['2d'] }); break;
+            case 'preset-audio': this.applyPreset({ type: ['audio'] }); break;
+            case 'openUrl': window.open(payload, '_blank'); break;
+          }
+        },
+
+        toggleFilter(group, val) { const arr = this.activeFilters[group]; const index = arr.indexOf(val); if (index > -1) arr.splice(index, 1); else arr.push(val); this.clearDragState(); },
+        getCount(group, val) { if (group === 'types') return this.sites.filter(s => s.types.includes(val)).length; if (group === 'licenses') return this.sites.filter(s => s.license === val).length; if (group === 'registers') return this.sites.filter(s => s.register === val).length; return 0; },
+        getLabel(group, val) { if (group === 'types') return TYPE_LABEL[val]; if (group === 'licenses') return LICENSE_LABEL[val]; if (group === 'registers') return REGISTER_LABEL[val]; return val; },
+        resetAll() { this.search = ''; this.favOnly = false; this.activeFilters = { types: [], licenses: [], registers: [] }; this.currentPage = 1; this.clearDragState(); },
+        toggleFav(site) { const index = this.favorites.indexOf(site.url); if (index > -1) { this.favorites.splice(index, 1); this.toast(`已取消收藏 · ${site.name}`, 'warn'); } else { this.favorites.push(site.url); this.toast(`已收藏 · ${site.name}`, 'ok'); } localStorage.setItem('ah_favs', JSON.stringify(this.favorites)); },
+        addRecent(site) { this.recentSites = this.recentSites.filter(s => s.url !== site.url); this.recentSites.unshift({ name: site.name, url: site.url }); if (this.recentSites.length > 5) this.recentSites.pop(); localStorage.setItem('ah_recent', JSON.stringify(this.recentSites)); },
+        clearRecent() { this.recentSites = []; localStorage.setItem('ah_recent', '[]'); this.toast('已清空最近访问', 'ok'); },
+        copyAll() { if (this.totalSites === 0) return this.toast('当前结果为空', 'warn'); const text = this.filteredSites.map(s => s.url).join('\n'); this.copyText(text, `已复制全部 ${this.totalSites} 条链接`); },
+        copyText(text, successMsg = '已复制') { if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => this.toast(successMsg, 'ok')); } else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); this.toast(successMsg, 'ok'); } },
+        getDomain(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } },
+        highlight(text) { const esc = String(text).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); if (!this.search.trim()) return esc; try { const queryParts = this.search.split(/\s+/).filter(Boolean); if (queryParts.length === 0) return esc; const escapedParts = queryParts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length); const re = new RegExp("(" + escapedParts.join("|") + ")", "gi"); return esc.replace(re, '<mark class="hl">$1</mark>'); } catch { return esc; } },
+        toast(msg, type = 'ok') { window.dispatchEvent(new CustomEvent('toast', { detail: { msg, type } })); }
+      }
+    }
+  </script>
+</body>
+</html>
