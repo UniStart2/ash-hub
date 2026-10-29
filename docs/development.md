@@ -74,9 +74,9 @@ lint-staged 规则：
 
 push 到 `main` 由 `.github/workflows/deploy.yml` 自动构建并双路部署：
 
-| 目标             | 地址形态                           | 前提配置                                                                                                                                       |
-| ---------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub Pages     | `https://<user>.github.io/<repo>/` | 仓库 Settings → Pages → Source 选 **GitHub Actions**                                                                                           |
-| Cloudflare Pages | `https://asset-hub.pages.dev`      | ① Cloudflare dashboard 手动创建 Pages 项目 `asset-hub`；② 仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（Pages 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID` |
+| 目标               | 地址形态                                  | 前提配置                                                                                                                                             |
+| ------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Pages       | `https://<user>.github.io/<repo>/`        | 仓库 Settings → Pages → Source 选 **GitHub Actions**                                                                                                 |
+| Cloudflare Workers | `https://asset-hub.<account>.workers.dev` | 仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（Workers 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID`；Worker 由 `wrangler deploy` 自动创建，配置见 `wrangler.toml` |
 
-实现要点：GitHub Pages 挂在子路径，构建时注入 `VITE_BASE=/<repo>/`；Cloudflare 在根路径，`base=/`。两份产物由 matrix 分别构建，不可复用。
+实现要点：GitHub Pages 挂在子路径，构建时注入 `VITE_BASE=/<repo>/`；Cloudflare 在根路径，`base=/`。两份产物由 matrix 分别构建，不可复用。Cloudflare 侧采用 Workers Static Assets（平台现行方向），纯静态托管，无 Worker 脚本。

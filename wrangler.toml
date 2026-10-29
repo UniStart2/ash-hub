@@ -1,0 +1,7 @@
+# Cloudflare Workers 部署配置（GitHub Actions 通过 wrangler 读取）
+# 纯静态站点：无 Worker 脚本，仅托管 dist/ 静态资产
+name = "asset-hub"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./dist"
