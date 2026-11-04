@@ -8,7 +8,7 @@
 
 补充规矩：原型稿版本号（v22、V17 等）是历史文物，留在文件名，**不是**产品版本；功能分支不带版本号。产品版本唯一来源是 `package.json` + git tag。
 
-## 分支模型
+## 分支模型：Git Flow
 
 | 分支            | 用途                                    |
 | --------------- | --------------------------------------- |
@@ -17,6 +17,8 @@
 | `feat/<scope>`  | 新功能，从 `develop` 切出，PR 合回      |
 | `fix/<scope>`   | 修复，同上                              |
 | `release/x.y.z` | 发布准备 → `main` + 回合 `develop`      |
+
+功能分支 push 到远程开 PR（合回 `develop`）；CI 部署挂在 `main`，合 `develop` 不触发线上变更。1.0 之前 release 仪式可简化为：develop 稳定后直开 `release/x.y.z` 打 tag。
 
 ## 提交：Conventional Commits
 
