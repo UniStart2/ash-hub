@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* prototype/ 下的原型稿（v22、V17）不是构建输入，排除出工具类扫描 */
+@source not '../prototype';
+
 @theme {
   --color-cyber-bg: #05060a;
   --color-cyber-panel: #0c0e17;

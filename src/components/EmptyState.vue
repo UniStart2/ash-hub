@@ -1,12 +1,10 @@
 <script setup lang="ts">
+// 跨域通用的赛博 HUD 空态：视觉 chrome（角标/终端字效/光标）留在组件内，
+// 文案经 props 注入，动作按钮走 actions 插槽——发现域与资产域共用同一实现。
 defineProps<{
-  favOnly: boolean;
-}>();
-
-const emit = defineEmits<{
-  resetFilters: [];
-  clearSearch: [];
-  exitFav: [];
+  alertCode: string; // 如 "ERR_0x454D505459"
+  headline: string; // 如 "EMPTY_COLLECTION"
+  lines: string[]; // 提示行，逐行渲染
 }>();
 </script>
 
@@ -26,14 +24,8 @@ const emit = defineEmits<{
       </div>
       <div class="font-mono text-[12px] leading-relaxed text-left text-cyber-text">
         <div class="text-cyber-dim2 select-none mb-1">$ query --status</div>
-        <div class="text-cyber-magenta">
-          <span v-if="favOnly">&gt; ERR_0x454D505459 : EMPTY_COLLECTION</span>
-          <span v-else>&gt; ERR_0x4E4F5F : NO_MATCH_FOUND</span>
-        </div>
-        <div class="text-cyber-dim mt-1">
-          <span v-if="favOnly">&gt; 收藏库为空，请先添加收藏。</span>
-          <span v-else>&gt; 没有匹配的条目，请检查输入。</span>
-        </div>
+        <div class="text-cyber-magenta">&gt; {{ alertCode }} : {{ headline }}</div>
+        <div v-for="(line, i) in lines" :key="i" class="text-cyber-dim mt-1">&gt; {{ line }}</div>
         <div class="mt-4 flex items-center gap-1.5 text-[10px] text-cyber-cyan">
           <span>等待输入_</span><span class="w-1.5 h-3 bg-cyber-cyan animate-pulse"></span>
         </div>
@@ -41,22 +33,7 @@ const emit = defineEmits<{
     </div>
 
     <div class="font-mono text-[12px] tracking-widest text-cyber-dim mt-2">
-      <span v-if="favOnly"
-        >你还没有收藏任何素材 ·
-        <button class="text-cyber-cyan hover:underline" @click="emit('exitFav')">
-          返回全部
-        </button></span
-      >
-      <span v-else
-        >没有找到匹配的站点 · 试试
-        <button class="text-cyber-cyan hover:underline" @click="emit('resetFilters')">
-          放宽筛选
-        </button>
-        或
-        <button class="text-cyber-cyan hover:underline" @click="emit('clearSearch')">
-          清空搜索
-        </button></span
-      >
+      <slot name="actions" />
     </div>
   </div>
 </template>
