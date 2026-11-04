@@ -1,0 +1,3174 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多模态资产中台 (V33 - 搜索命令融合版)</title>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base: '#0a0a0c', surface: '#151518', panel: '#1e1e24', primary: '#3b82f6',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { background-color: #0a0a0c; overflow: hidden; height: 100vh; }
+  #three-canvas { width: 100%; height: 100%; position: absolute; inset: 0; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+
+  /* 悬浮药丸的玻璃拟态 */
+  .glass-pill {
+    background: rgba(30, 30, 36, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+
+  /* 版本列表项 */
+  .ver-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px; border-radius: 8px; border: 1px solid #27272a;
+    background: #1e1e24; color: #a1a1aa; cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ver-item:hover { background: #27272a; border-color: #52525b; }
+  .ver-item.is-active {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #3b82f6;
+    transform: scale(1.02);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+  }
+  /* check 图标常驻渲染, 由父级 is-active 纯 CSS 控制显隐
+     (避免 v-if 切换被 lucide 替换过的节点, 触发 Vue 补丁崩溃) */
+  .ver-item .ver-check { visibility: hidden; }
+  .ver-item.is-active .ver-check { visibility: visible; }
+
+  /* 材质球 */
+  .swatch { width: 18px; height: 18px; border-radius: 50%; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
+  .swatch.active { border-color: #fff; transform: scale(1.1); }
+  .swatch-gray { background: radial-gradient(circle at 30% 30%, #ccc, #555); }
+  .swatch-blue { background: radial-gradient(circle at 30% 30%, #93c5fd, #1d4ed8); }
+  .swatch-orange { background: radial-gradient(circle at 30% 30%, #fdba74, #ea580c); }
+
+  /* 时间轴标尺与网格 */
+  .ruler-bg { background-image: repeating-linear-gradient(to right, #3f3f46 0, #3f3f46 1px, transparent 1px, transparent 40px); }
+  .track-grid { background-image: linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 40px 100%; }
+
+  /* 音频波形 */
+  .wave-bar { flex: 1; background: rgba(16, 185, 129, 0.8); border-radius: 1px; }
+  .wave-bar-light { flex: 1; background: rgba(255, 255, 255, 0.35); border-radius: 1px; }
+
+  /* Vue 过渡类 */
+  .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+  /* V27: Toast 生命周期进度条 */
+  .toast-life { animation-name: toastShrink; animation-timing-function: linear; animation-fill-mode: forwards; }
+  .toast-life.paused { animation-play-state: paused; }
+  @keyframes toastShrink { from { width: 100%; } to { width: 0%; } }
+  .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+  /* 播放按钮双图标切换: lucide 替换后不能对 <i> 用 v-if/属性绑定,
+     改为父级 button 的 class 纯 CSS 控制显隐 */
+  .media-btn .icon-pause { display: none; }
+  .media-btn.is-playing .icon-play { display: none; }
+  .media-btn.is-playing .icon-pause { display: inline-block; }
+
+  /* === V19: 轨道块交互 === */
+  .clip-block { cursor: grab; touch-action: none; user-select: none; }
+  .clip-block.clip-dragging { cursor: grabbing; }
+  .clip-block.clip-selected { border-color: rgba(255,255,255,0.85); box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 10px 24px rgba(0,0,0,0.55); z-index: 5; }
+  .clip-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; opacity: 0; transition: opacity .15s ease, background .15s ease; }
+  .clip-handle.left { left: 0; border-radius: 4px 0 0 4px; }
+  .clip-handle.right { right: 0; border-radius: 0 4px 4px 0; }
+  .clip-block:hover .clip-handle { opacity: 1; background: rgba(255,255,255,0.25); }
+  .clip-block .clip-handle:hover { background: rgba(255,255,255,0.6); }
+  /* === V29: 淡入淡出拖拽手柄 — 音频片段顶角, 悬停显现, 有淡变时常亮 === */
+  .fade-handle { position: absolute; top: 1px; width: 9px; height: 9px; border-radius: 2px;
+    background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5);
+    cursor: ew-resize; z-index: 12; opacity: 0; transition: opacity 0.15s, background 0.15s; }
+  .fade-handle.left { left: 1px; }
+  .fade-handle.right { right: 1px; }
+  .clip-block:hover .fade-handle { opacity: 1; }
+  .fade-handle.fade-active { opacity: 1; background: #fbbf24; border-color: #fde68a; box-shadow: 0 0 6px rgba(251,191,36,0.7); }
+  .fade-handle:hover { background: rgba(255,255,255,0.85); }
+  /* === V29: 裁切框手柄 === */
+  .crop-grip { position: absolute; width: 8px; height: 8px; background: #3b82f6; border: 1px solid #fff; border-radius: 2px; z-index: 21; }
+
+  /* === V21: 轨道头 (DaVinci 式 V1/A1 徽标 + 锁定) === */
+  .track-cluster { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); z-index: 20;
+    display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 6px;
+    background: rgba(10,10,12,0.9); border: 1px solid rgba(63,63,70,0.55); pointer-events: none; }
+  .track-cluster .track-toggle { position: relative; left: auto; top: auto; transform: none; pointer-events: auto; }
+  .track-cluster .track-head-btn { pointer-events: auto; }
+
+  /* === V22: 轨道头独立列 (track-toggle 恢复行内流式) === */
+  .track-head-col .track-toggle { position: relative; left: auto; top: auto; transform: none; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center; border-radius: 5px; color: #a1a1aa; }
+  .track-head-col .track-toggle:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+  .track-head-col .track-head-btn { width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; }
+
+  /* === V23: 检查器收起按钮 — 双图标纯 CSS 切换 (与 track-head-btn 同族) === */
+  .caret-btn { width: 22px; height: 22px; border-radius: 5px; display: flex; align-items: center; justify-content: center;
+    color: #a1a1aa; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+  .caret-btn:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+  .caret-btn .icon-on { display: block; }
+  .caret-btn .icon-off { display: none; }
+  .caret-btn.collapsed .icon-on { display: none; }
+  .caret-btn.collapsed .icon-off { display: block; }
+  /* V25: 轨道头 grip 排序 / 内联重命名输入 / 右键菜单项 */
+  .reorder-grip { width: 14px; height: 22px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    color: #52525b; cursor: grab; flex-shrink: 0; transition: color 0.15s, background 0.15s; }
+  .reorder-grip:hover { color: #a1a1aa; background: rgba(255,255,255,0.06); }
+  .reorder-grip:active { cursor: grabbing; }
+  .rename-input { width: 44px; height: 20px; padding: 0 4px; border-radius: 4px; background: #000; border: 1px solid #3f3f46;
+    color: #fff; font-size: 10px; font-weight: 800; text-align: center; outline: none; flex-shrink: 0; }
+  .rename-input:focus { border-color: #3b82f6; }
+  .menu-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #d4d4d8;
+    transition: background 0.12s, color 0.12s; text-align: left; }
+  .menu-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+  .menu-item:disabled { opacity: 0.4; pointer-events: none; }
+  .track-badge { min-width: 22px; height: 20px; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; color: #fff; letter-spacing: 0.02em; }
+  .track-badge.b-video { background: #2563eb; }
+  .track-badge.b-audio { background: #059669; }
+  .track-head-btn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; color: #a1a1aa; background: rgba(0,0,0,0.45); border: 1px solid rgba(63,63,70,0.5); }
+  .track-head-btn:hover { color: #fff; }
+  .track-head-btn .icon-on { display: none; }
+  .track-head-btn.locked .icon-on { display: inline-block; }
+  .track-head-btn.locked .icon-off { display: none; }
+  .track-head-btn.locked { color: #fbbf24; border-color: rgba(251,191,36,0.45); }
+  .track-locked .clip-block { opacity: 0.45; }
+  .track-locked .clip-handle { display: none; }
+  /* V21: 视频片段胶片纹降级 (canvas 抽帧跨域失败时) */
+  .filmstrip-fallback { background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 2px, rgba(0,0,0,0.14) 2px 4px, transparent 4px 42px); }
+
+  /* 轨道开关 (眼睛/喇叭): 双图标常驻, 父级 .off 纯 CSS 切换 */
+  .track-toggle { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); z-index: 10;
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; color: #a1a1aa; background: rgba(0,0,0,0.45); border: 1px solid rgba(63,63,70,0.5); }
+  .track-toggle:hover { color: #fff; }
+  .track-toggle .icon-off { display: none; }
+  .track-toggle.off .icon-on { display: none; }
+  .track-toggle.off .icon-off { display: inline-block; }
+  .track-toggle.off { color: #52525b; }
+
+  /* 编辑面板顶部的模式导航 (DaVinci 式页面切换) */
+  .seg-btn { padding: 3px 14px; font-size: 11px; border-radius: 9999px; color: #a1a1aa; transition: color .2s, background .2s; }
+  .seg-btn:hover { color: #e4e4e7; }
+  .seg-active { background: rgba(59,130,246,0.9); color: #fff; }
+</style>
+</head>
+<body class="text-zinc-200 font-sans antialiased">
+
+<div id="app" class="h-full w-full flex flex-col">
+  <!-- V33: 渲染队列提升为全局固定面板 (资产库/查看器/编辑模式均可呼出) -->
+        <!-- ============ V20 渲染队列面板 (对标 DaVinci Deliver, 跨模式常驻) ============ -->
+  <div v-if="showQueue" class="fixed top-16 right-4 w-80 bg-panel/95 backdrop-blur border border-zinc-700 rounded-xl shadow-2xl z-[300] flex flex-col max-h-[60vh]">
+          <div class="h-11 border-b border-zinc-800 flex items-center justify-between px-3">
+            <span class="text-xs font-bold text-zinc-300 tracking-wide">渲染队列</span>
+            <div class="flex items-center gap-1">
+              <button class="btn btn-ghost btn-xs text-zinc-500 hover:text-white" @click="clearDoneJobs">清除已完成</button>
+              <button class="btn btn-ghost btn-xs btn-circle text-zinc-500 hover:text-white" @click="showQueue = false"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto p-2 space-y-2">
+            <div v-if="!exportJobs.length" class="text-center text-xs text-zinc-600 py-8">队列为空，从「导出」添加任务</div>
+            <div v-for="job in exportJobs" :key="job.id" class="bg-black/40 border border-zinc-800 rounded-lg p-2.5">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs text-zinc-200 truncate pr-2">{{ job.name }}</span>
+                <span class="text-[10px] font-bold shrink-0"
+                      :class="{ 'text-zinc-500': job.status === 'queued', 'text-primary': job.status === 'rendering', 'text-emerald-400': job.status === 'done', 'text-red-400': job.status === 'error' }">
+                  {{ job.status === 'queued' ? '排队中' : (job.status === 'rendering' ? '渲染中' : (job.status === 'error' ? '失败' : '已完成')) }}
+                </span>
+              </div>
+              <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-300"
+                     :class="job.status === 'done' ? 'bg-emerald-500' : (job.status === 'error' ? 'bg-red-500' : 'bg-primary')"
+                     :style="{ width: job.progress + '%' }"></div>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[10px] font-mono text-zinc-500">{{ job.status === 'done' ? fmtSize(job.size) : job.progress + '%' }}</span>
+                <button v-if="job.status === 'done' && job.url" class="btn btn-ghost btn-xs text-primary gap-1" @click="downloadJob(job)"><i data-lucide="download" class="w-3 h-3"></i>下载</button>
+              </div>
+              <div v-if="job.status === 'error'" class="text-[10px] text-red-400 mt-1">{{ job.error }}</div>
+            </div>
+          </div>
+        </div>
+
+  <!-- ================= V32: Cmd+K 命令面板 (全局) ================= -->
+  <div v-if="paletteOpen" class="fixed inset-0 z-[9990] flex items-start justify-center pt-[18vh] bg-black/60 backdrop-blur-sm" @mousedown.self="closePalette">
+    <div class="w-[560px] max-w-[92vw] bg-panel border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div class="flex items-center gap-3 px-4 h-14 border-b border-zinc-800">
+        <i data-lucide="command" class="w-4 h-4 text-primary shrink-0"></i>
+        <input id="palette-input" ref="paletteInputEl" v-model="paletteQuery" type="text" placeholder="输入命令名称，或按 ↑ ↓ 选择、Enter 执行…"
+               class="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600"
+               @keydown="paletteKeydown" />
+        <kbd class="kbd kbd-xs text-zinc-500">ESC</kbd>
+      </div>
+      <div class="max-h-[46vh] overflow-y-auto p-2">
+        <template v-for="g in paletteGroups" :key="g.name">
+          <div class="px-2 pt-2.5 pb-1 text-[10px] font-bold tracking-widest text-zinc-600">{{ g.name }}</div>
+          <button v-for="c in g.items" :key="c.id"
+                  class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors"
+                  :class="[paletteFlat[paletteIdx] && paletteFlat[paletteIdx].id === c.id ? 'bg-primary/15 text-white' : 'text-zinc-300 hover:bg-white/5', c.disabled ? 'opacity-40' : '']"
+                  :disabled="c.disabled"
+                  @click="runCommand(c)"
+                  @mousemove="paletteIdx = paletteFlat.findIndex(x => x.id === c.id)">
+            <i :data-lucide="c.icon" class="w-4 h-4 shrink-0" :class="paletteFlat[paletteIdx] && paletteFlat[paletteIdx].id === c.id ? 'text-primary' : 'text-zinc-500'"></i>
+            <span class="flex-1 text-sm truncate">{{ c.name }}</span>
+            <kbd v-if="c.hint" class="kbd kbd-xs text-zinc-500 font-mono">{{ c.hint }}</kbd>
+          </button>
+        </template>
+        <div v-if="!paletteFlat.length" class="text-center text-xs text-zinc-600 py-10">没有匹配的命令</div>
+      </div>
+      <div class="px-4 h-9 border-t border-zinc-800 flex items-center gap-4 text-[10px] text-zinc-600">
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑↓</kbd> 选择</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> 执行</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> 关闭</span>
+      </div>
+    </div>
+  </div>
+
+  <transition-group name="fade" tag="div" class="toast toast-end toast-bottom z-[9999] items-end">
+    <div v-for="t in toasts" :key="t.id"
+         class="alert bg-panel border shadow-2xl flex items-center gap-2.5 text-sm text-white rounded-lg py-2.5 pl-3 pr-3 w-72 relative overflow-hidden"
+         :class="t.type === 'error' ? 'border-red-500/40' : t.type === 'warn' ? 'border-amber-500/40' : t.type === 'success' ? 'border-primary/40' : 'border-zinc-700'"
+         @mouseenter="t.hold = true" @mouseleave="t.hold = false">
+      <i :data-lucide="t.icon" class="w-4 h-4 shrink-0" :class="t.color"></i>
+      <span class="flex-1 leading-snug text-[13px]">{{ t.msg }}</span>
+      <button class="text-zinc-600 hover:text-zinc-300 transition shrink-0" @click="dismissToast(t.id)" title="关闭">
+        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+      </button>
+      <!-- V27: 生命周期进度条 — 去重刷新时 born 变化重建动画; 悬停暂停 -->
+      <div :key="'bar' + t.born" class="absolute bottom-0 left-0 h-[2px] toast-life" :class="{ paused: t.hold }"
+           :style="{ background: t.bar, animationDuration: TOAST_LIFE + 'ms' }"></div>
+    </div>
+  </transition-group>
+
+  <!-- V25: 轨道右键菜单 — 挂在 #app 根级, 避免 GSAP transform 祖先使 fixed 遮罩失效 -->
+  <div v-if="trackMenu" class="fixed inset-0 z-[300]" @click="trackMenu = null" @contextmenu.prevent="trackMenu = null"></div>
+  <div v-if="trackMenu" class="fixed z-[310] w-44 bg-panel border border-zinc-700 rounded-lg shadow-2xl py-1 text-xs"
+       :style="{ left: trackMenu.x + 'px', top: trackMenu.y + 'px' }">
+    <button class="menu-item" @click="startRenameTrack(trackMenu.type, trackMenu.trackId)">
+      <i data-lucide="pencil" class="w-3.5 h-3.5"></i> 重命名
+    </button>
+    <button class="menu-item" :class="{ 'opacity-40 pointer-events-none': (trackMenu.type === 'video' ? videoTracks : audioTracks).length <= 1 }" @click="deleteTrack(trackMenu.type, trackMenu.trackId)">
+      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 删除轨道
+    </button>
+    <div class="my-1 border-t border-zinc-800"></div>
+    <button class="menu-item" @click="toggleTrackLock(trackMenu.type, trackMenu.trackId)">
+      <i data-lucide="lock" class="w-3.5 h-3.5"></i> {{ isTrackLocked(trackMenu.type, trackMenu.trackId) ? '解锁轨道' : '锁定轨道' }}
+    </button>
+    <button class="menu-item" @click="toggleTrackVis(trackMenu.type, trackMenu.trackId)">
+      <i data-lucide="eye" class="w-3.5 h-3.5"></i> {{ trackMenu.type === 'video' ? '显示 / 隐藏' : '静音 / 取消' }}
+    </button>
+  </div>
+
+  <!-- ================= 视图一：资产库 ================= -->
+  <main v-if="currentView === 'library'" class="flex-1 overflow-y-auto">
+    <header class="h-14 border-b border-zinc-800/80 px-6 flex items-center gap-8 sticky top-0 bg-base/90 backdrop-blur z-50">
+      <div class="flex items-center gap-2 text-base font-bold">
+        <div class="w-5 h-5 bg-primary rounded shadow-[0_0_12px_rgba(59,130,246,0.6)]"></div> Asset Hub
+      </div>
+      <nav class="flex gap-6 h-full">
+        <button class="text-sm font-medium border-b-2 border-primary text-white">资产库</button>
+        <button class="text-sm font-medium border-b-2 border-transparent text-zinc-400 hover:text-white" @click="currentView = 'workspace'">工作台</button>
+      </nav>
+    </header>
+
+    <div class="max-w-[1600px] mx-auto p-6 md:p-10">
+      <div class="flex justify-between items-end mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-white mb-2">全部资产</h1>
+          <p class="text-sm text-zinc-400">统一管理多模态内容、版本溯源与在线编辑。</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- V33: ⌘K 已并入搜索栏命令模式, 头部不再单独入口 -->
+          <button class="btn btn-sm btn-primary gap-2" @click="showToast('调起本地文件选择器...')">
+            <i data-lucide="upload-cloud" class="w-4 h-4"></i> 导入资源
+          </button>
+        </div>
+      </div>
+
+      <!-- V32: 资产检索工具条 — 搜索 / 类型筛选 / 标签筛选 / 收藏视图 -->
+      <div class="flex flex-wrap items-center gap-3 mb-6">
+        <div class="relative w-96">
+          <i data-lucide="search" class="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+          <!-- V33: 搜索 / 命令双模式输入框 — 输入 > 进入命令模式 -->
+          <input id="lib-search" v-model="libSearch" type="text"
+                 placeholder="搜索名称 / 提示词 / 标签…  ( 输入 > 进入命令模式 )"
+                 class="input input-sm input-bordered border-zinc-700 bg-surface w-full pl-9 text-sm placeholder:text-zinc-600 focus:border-primary"
+                 :class="libCmdMode ? '!border-primary text-primary' : ''"
+                 @keydown="libSearchKeydown" />
+          <button v-if="libSearch && !libCmdMode" class="absolute right-14 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white" @click="libSearch = ''"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+          <button class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5" title="命令模式 (⌘K)" @click="enterLibCmd">
+            <kbd class="kbd kbd-xs">⌘</kbd><kbd class="kbd kbd-xs">K</kbd>
+          </button>
+          <!-- V33: 命令模式下拉 (与搜索栏同位, 不再独立弹层) -->
+          <div v-if="libCmdMode" class="absolute left-0 right-0 top-full mt-2 bg-panel/95 backdrop-blur border border-zinc-700 rounded-xl shadow-2xl z-50 max-h-[46vh] overflow-y-auto p-1.5">
+            <div v-if="!libCmdFlat.length" class="text-center text-xs text-zinc-600 py-6">没有匹配的命令</div>
+            <template v-for="g in libCmdGroups" :key="g.name">
+              <div class="px-2.5 pt-2 pb-1 text-[10px] font-bold tracking-wider text-zinc-600">{{ g.name }}</div>
+              <button v-for="c in g.items" :key="c.id"
+                      class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-sm transition-colors"
+                      :class="[libCmdFlat[libCmdIdx] && libCmdFlat[libCmdIdx].id === c.id ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-white/5', c.disabled ? 'opacity-40 cursor-not-allowed' : '']"
+                      @click="runLibCmd(c)" @mousemove="libCmdIdx = libCmdFlat.findIndex(x => x.id === c.id)">
+                <i :data-lucide="c.icon" class="w-4 h-4 text-zinc-500 shrink-0"></i>
+                <span class="flex-1 truncate">{{ c.name }}</span>
+                <kbd v-if="c.hint" class="kbd kbd-xs text-zinc-600">{{ c.hint }}</kbd>
+              </button>
+            </template>
+            <div class="px-2.5 pt-2 pb-1 text-[10px] text-zinc-700 flex gap-3 border-t border-zinc-800 mt-1"><span>↑↓ 选择</span><span>↵ 执行</span><span>esc 退出命令模式</span></div>
+          </div>
+        </div>
+        <div class="flex items-center bg-black/50 rounded-full p-0.5 border border-zinc-700/60">
+          <button v-for="f in LIB_TYPE_FILTERS" :key="f.v"
+                  class="seg-btn text-xs" :class="libTypeFilter === f.v ? 'seg-active' : ''"
+                  @click="libTypeFilter = f.v">{{ f.label }}</button>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button v-for="t in (libTagsExpanded ? allTags : allTags.slice(0, 8))" :key="t"
+                  class="btn btn-xs rounded-full gap-1" :class="libTagFilter === t ? 'btn-primary' : 'btn-outline border-zinc-700 text-zinc-400 hover:text-zinc-200'"
+                  @click="libTagFilter = libTagFilter === t ? null : t">
+            <i data-lucide="tag" class="w-3 h-3"></i>{{ t }}
+          </button>
+          <button v-if="allTags.length > 8 && !libTagsExpanded" class="btn btn-xs btn-ghost rounded-full text-zinc-500 hover:text-zinc-200 font-mono"
+                  @click="libTagsExpanded = true" title="展开全部标签">+{{ allTags.length - 8 }}</button>
+          <button v-else-if="allTags.length > 8" class="btn btn-xs btn-ghost rounded-full text-zinc-500 hover:text-zinc-200 font-mono"
+                  @click="libTagsExpanded = false" title="收起">收起</button>
+        </div>
+        <button class="btn btn-xs rounded-full gap-1.5 ml-auto" :class="libFavOnly ? 'btn-primary' : 'btn-outline border-zinc-700 text-zinc-400 hover:text-zinc-200'"
+                @click="libFavOnly = !libFavOnly" title="只看收藏">
+          <i data-lucide="star" class="w-3.5 h-3.5" :class="libFavOnly ? 'fill-current' : ''"></i> 收藏
+        </button>
+      </div>
+      <div class="text-xs text-zinc-600 mb-6 font-mono">共 {{ filteredAssets.length }} 项<template v-if="filteredAssets.length !== assets.length"> / 全量 {{ assets.length }} 项</template></div>
+
+      <div v-if="!filteredAssets.length" class="flex flex-col items-center justify-center py-24 text-zinc-600 gap-3">
+        <i data-lucide="search-x" class="w-10 h-10"></i>
+        <p class="text-sm">没有匹配的资产 — 调整关键词或筛选条件</p>
+        <button class="btn btn-xs btn-outline border-zinc-700" @click="libSearch = ''; libTypeFilter = 'ALL'; libTagFilter = null; libFavOnly = false">清空筛选</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div v-for="asset in pagedAssets" :key="asset.uuid"
+             class="group bg-surface border border-zinc-800/80 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-zinc-600 flex flex-col"
+             @click="openViewer(asset)">
+          <div class="aspect-[4/3] relative overflow-hidden bg-zinc-900 isolate transform-gpu">
+            <div class="w-full h-full bg-cover bg-center transition-transform duration-500 will-change-transform group-hover:scale-105" :style="{ backgroundImage: `url('${asset.thumbnail}')` }"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+            <div class="absolute top-3 left-3 bg-black/60 backdrop-blur px-2 py-1 rounded text-[11px] font-medium border border-white/10">{{ asset.source.engine }}</div>
+            <div class="absolute bottom-3 right-3 bg-primary/90 px-2 py-0.5 rounded text-[10px] font-bold">{{ asset.format }}</div>
+            <!-- V32: 收藏开关 (阻止冒泡打开查看器) -->
+            <button class="absolute bottom-3 left-3 btn btn-xs btn-circle btn-ghost bg-black/50 border-white/10"
+                    :class="isFav(asset.uuid) ? 'text-amber-400 border-amber-400/50' : 'text-zinc-500 hover:text-zinc-200 hover:border-amber-400/60'"
+                    :title="isFav(asset.uuid) ? '取消收藏' : '收藏'" @click.stop="toggleFav(asset.uuid)">
+              <i data-lucide="star" class="w-3.5 h-3.5 fill-current"></i>
+            </button>
+            <!-- V23: Schema 驱动的差异化元数据 tooltip — 字段集随类型 / 版本格式变化 -->
+            <div class="absolute top-3 right-3 w-56 bg-black/90 backdrop-blur border border-zinc-700 rounded-lg p-3 text-[10px] font-mono text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30 shadow-2xl">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <span class="text-white font-bold text-[11px] truncate">{{ asset.name }}.{{ versionOf(asset).format.toLowerCase() }}</span>
+                <span class="badge badge-xs badge-outline border-zinc-600 text-zinc-400 font-bold shrink-0">{{ versionOf(asset).tag }}</span>
+              </div>
+              <div class="space-y-1">
+                <meta-row v-for="row in metaRowsOf(asset)" :key="row[0]" :label="row[1]" :value="String(row[2])"></meta-row>
+                <meta-row label="版本" :value="asset.current_version + ' · 共 ' + asset.versions.length + ' 个'"></meta-row>
+              </div>
+            </div>
+          </div>
+          <div class="p-4 flex-1 flex flex-col justify-between">
+            <div class="flex items-center gap-2 text-sm font-semibold text-zinc-100 mb-2">
+              <i :data-lucide="getTypeIcon(asset.type)" class="w-4 h-4 text-zinc-500"></i>
+              <span class="truncate">{{ asset.name }}</span>
+              <span v-if="isFav(asset.uuid)" class="text-amber-400 inline-flex shrink-0"><i data-lucide="star" class="w-3 h-3 fill-current"></i></span>
+            </div>
+            <!-- V32: 标签行 -->
+            <div v-if="asset.tags && asset.tags.length" class="flex flex-wrap gap-1 mb-2">
+              <span v-for="t in asset.tags.slice(0, 3)" :key="t" class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700/50">{{ t }}</span>
+              <span v-if="asset.tags.length > 3" class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/40 text-zinc-500 border border-zinc-800" :title="asset.tags.slice(3).join('、')">+{{ asset.tags.length - 3 }}</span>
+            </div>
+            <div class="flex justify-between text-xs text-zinc-500">
+              <span>版本 {{ asset.current_version }}</span>
+              <span>{{ asset.type }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- V33: 分页器 (大数据量性能: 每页只渲染 12/24/48 张卡片, 避免 DOM 膨胀) -->
+      <div v-if="libPageCount > 1" class="flex items-center justify-center gap-4 mt-8 text-xs text-zinc-500">
+        <button class="btn btn-xs btn-outline border-zinc-700" :disabled="libPage <= 1" @click="libPage--"><i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>上一页</button>
+        <span class="font-mono">第 {{ libPage }} / {{ libPageCount }} 页</span>
+        <button class="btn btn-xs btn-outline border-zinc-700" :disabled="libPage >= libPageCount" @click="libPage++">下一页<i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
+        <select v-model.number="libPageSize" class="select select-xs select-bordered border-zinc-700 bg-surface text-zinc-300">
+          <option :value="12">12 / 页</option>
+          <option :value="24">24 / 页</option>
+          <option :value="48">48 / 页</option>
+        </select>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= 视图二：工作台 ================= -->
+  <main v-if="currentView === 'workspace'" class="flex-1 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.05)_0%,transparent_50%)]">
+    <i data-lucide="cpu" class="w-16 h-16 text-primary mb-4"></i>
+    <h2 class="text-xl font-bold text-white mb-2">多模态生成工作台</h2>
+    <p class="text-zinc-400 text-sm">此处将接入大模型调度引擎 (Blender / 混元3D / ffmpeg.wasm 等)</p>
+  </main>
+
+  <!-- ================= 视图三：资产查看器 (单一状态源: currentAsset) ================= -->
+  <div v-if="currentAsset" id="viewer-root" class="fixed inset-0 z-[200] bg-base flex flex-col">
+
+    <!-- 顶部全局栏 -->
+    <div class="h-14 shrink-0 border-b border-zinc-800 flex items-center justify-between px-4 bg-base z-50">
+      <div class="flex items-center gap-4">
+        <button class="btn btn-sm btn-ghost btn-circle text-zinc-400 hover:text-white" @click="closeViewer">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div class="flex items-center gap-2 text-sm text-zinc-400">
+          <span>资产库</span>
+          <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          <span class="text-white font-medium">{{ currentAsset.name }}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- V20 渲染队列入口 (对标 DaVinci Deliver 页队列) -->
+        <button class="btn btn-sm btn-ghost text-zinc-400 hover:text-white gap-2" @click="showQueue = !showQueue">
+          <span class="relative inline-flex">
+            <i data-lucide="list-video" class="w-4 h-4"></i>
+            <span v-if="exportJobs.some(j => j.status !== 'done')" class="absolute -top-2 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
+              {{ exportJobs.filter(j => j.status !== 'done').length }}
+            </span>
+          </span>
+          队列
+        </button>
+        <button class="btn btn-sm btn-ghost text-zinc-400 hover:text-white gap-2" @click="showToast('已复制分享链接')"><i data-lucide="share-2" class="w-4 h-4"></i> 分享</button>
+      </div>
+    </div>
+
+    <!-- 核心内容区 (Flex 横向排列) -->
+    <div class="flex-1 flex overflow-hidden">
+
+      <!-- 左侧属性栏 -->
+      <aside class="w-[320px] shrink-0 bg-surface border-r border-zinc-800 flex flex-col overflow-y-auto z-10">
+        <div class="px-5 py-4 border-b border-zinc-800/80 flex items-center justify-between">
+          <span class="text-sm font-bold text-zinc-200">属性与溯源</span>
+          <i data-lucide="settings-2" class="w-4 h-4 text-zinc-500"></i>
+        </div>
+        <div class="p-5 space-y-6">
+
+          <!-- 版本控制 (V17 新增) -->
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><i data-lucide="git-branch" class="w-3.5 h-3.5"></i> 版本控制</div>
+            <div class="space-y-2">
+              <div v-for="ver in currentAsset.versions" :key="ver.tag"
+                   class="ver-item"
+                   :class="{ 'is-active': currentAsset.current_version === ver.tag }"
+                   @click="switchVersion(ver.tag)">
+                <div class="min-w-0">
+                  <div class="text-sm font-bold flex items-center gap-1.5">{{ ver.tag }}
+                    <span class="badge badge-xs badge-outline border-zinc-600 text-zinc-400 font-mono font-normal">{{ ver.format }}</span>
+                  </div>
+                  <div class="text-[10px] opacity-70 truncate">{{ ver.date }} · {{ ver.note }}</div>
+                </div>
+                <i data-lucide="check" class="w-4 h-4 ver-check shrink-0"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><i data-lucide="globe" class="w-3.5 h-3.5"></i> 公开信息</div>
+            <div class="bg-panel border border-zinc-800 rounded-lg p-4 space-y-3">
+              <div>
+                <div class="text-xs text-zinc-500 mb-1">资产名称</div>
+                <div class="text-sm text-zinc-200">{{ currentAsset.name }}</div>
+              </div>
+              <!-- V24: 格式属版本层事实, 仅保留于版本芯片 + 元数据徽标两处有意冗余; 资产层只留类型 -->
+              <div class="flex justify-between items-center">
+                <div>
+                  <div class="text-xs text-zinc-500 mb-1">资产类型</div>
+                  <div class="text-xs font-mono text-zinc-200">{{ currentAsset.type }}</div>
+                </div>
+                <span class="badge badge-sm border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">Valid</span>
+              </div>
+              <div>
+                <div class="text-xs text-zinc-500 mb-1">原始提示词 (Prompt)</div>
+                <div class="text-xs text-zinc-400 italic bg-base p-2.5 rounded border border-zinc-800/50">"{{ currentAsset.prompt }}"</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- V23: 技术元数据卡片 — Schema 化字段, 跟随当前激活版本 (含同类型不同格式) -->
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="activity" class="w-3.5 h-3.5"></i> 技术元数据
+              <span class="badge badge-xs badge-outline border-zinc-700 text-zinc-400 font-mono font-normal normal-case ml-auto">{{ activeVerInfo }}</span>
+            </div>
+            <div class="bg-panel border border-zinc-800 rounded-lg p-3">
+              <div class="space-y-1.5 text-[11px]">
+                <meta-row v-for="row in viewerMetaRows" :key="row[0]" :label="row[1]" :value="String(row[2])"></meta-row>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><i data-lucide="lock" class="w-3.5 h-3.5"></i> 内部溯源</div>
+            <div class="bg-panel border border-zinc-800 rounded-lg p-4 space-y-3">
+              <div>
+                <div class="text-xs text-zinc-500 mb-1">全局 UUID</div>
+                <div class="text-[11px] font-mono text-zinc-400 break-all">{{ currentAsset.uuid }}</div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <div class="text-xs text-zinc-500 mb-1">生成引擎</div>
+                  <div class="text-xs text-zinc-200">{{ currentAsset.source.engine }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-zinc-500 mb-1">算力节点</div>
+                  <div class="text-xs text-zinc-200">{{ currentAsset.source.account }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 中央视图区 (Flex 纵向) -->
+      <div class="flex-1 flex flex-col bg-[#050505] overflow-hidden relative" id="main-view-container">
+
+        <!-- A. 主视口 (进入编辑模式时，被下方的时间轴挤压上去) -->
+        <div class="flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+             :style="{ paddingBottom: isEditing ? editorHeightPct + 'vh' : '0px', transition: editorDragging ? 'none' : '' }">
+
+          <div v-if="currentAsset.type === '3D'" class="absolute top-4 right-4 z-10">
+            <button class="btn btn-sm glass-pill rounded-full gap-2 text-xs"
+                    :class="showGrid ? 'text-primary border-primary' : 'text-zinc-300'" @click="toggleGrid">
+              <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> 网格{{ showGrid ? '开' : '关' }}
+            </button>
+          </div>
+
+          <div id="three-canvas" v-show="currentAsset.type === '3D'"></div>
+
+          <!-- 媒体事件统一驱动幕布: 不再使用任何 setTimeout -->
+          <!-- V29: 图像阶段 — 裁切框/遮罩叠加层, 应用后 clip-path 落图 -->
+          <div v-if="currentAsset.type === 'IMAGE'" class="relative inline-block p-8 max-w-full max-h-full">
+            <img :src="currentAsset.activeUrl"
+                 class="max-w-full max-h-full object-contain block transition-all duration-200"
+                 :style="{ filter: imgFilterStr, transform: imgTransform, clipPath: cropApplied ? cropClipPath : 'none' }"
+                 @load="onMediaReady" @error="onMediaError" />
+            <div v-if="cropMode" class="crop-layer absolute inset-0 z-20">
+              <div class="absolute border-2 border-primary rounded-sm shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] cursor-move"
+                   :style="cropBoxStyle" @mousedown.prevent="startCropMove">
+                <div class="crop-grip" style="left:-4px; top:-4px; cursor:nwse-resize" @mousedown.prevent.stop="startCropResize($event, 'nw')"></div>
+                <div class="crop-grip" style="right:-4px; top:-4px; cursor:nesw-resize" @mousedown.prevent.stop="startCropResize($event, 'ne')"></div>
+                <div class="crop-grip" style="left:-4px; bottom:-4px; cursor:nesw-resize" @mousedown.prevent.stop="startCropResize($event, 'sw')"></div>
+                <div class="crop-grip" style="right:-4px; bottom:-4px; cursor:nwse-resize" @mousedown.prevent.stop="startCropResize($event, 'se')"></div>
+                <div class="crop-grip" style="left:calc(50% - 4px); top:-4px; cursor:ns-resize" @mousedown.prevent.stop="startCropResize($event, 'n')"></div>
+                <div class="crop-grip" style="left:calc(50% - 4px); bottom:-4px; cursor:ns-resize" @mousedown.prevent.stop="startCropResize($event, 's')"></div>
+                <div class="crop-grip" style="left:-4px; top:calc(50% - 4px); cursor:ew-resize" @mousedown.prevent.stop="startCropResize($event, 'w')"></div>
+                <div class="crop-grip" style="right:-4px; top:calc(50% - 4px); cursor:ew-resize" @mousedown.prevent.stop="startCropResize($event, 'e')"></div>
+              </div>
+              <!-- 裁切工具条 -->
+              <div class="absolute -bottom-12 left-1/2 -translate-x-1/2 glass-pill rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                <button v-for="a in [null, '1:1', '4:3', '16:9']" :key="a || 'free'"
+                        class="btn btn-xs" :class="cropAspect === a ? 'btn-primary' : 'btn-ghost text-zinc-300'"
+                        @click="setCropAspect(a)">{{ a || '自由' }}</button>
+                <div class="w-px h-4 bg-zinc-700 mx-1"></div>
+                <button class="btn btn-xs btn-primary gap-1" @click="applyCrop"><i data-lucide="check" class="w-3 h-3"></i>应用</button>
+                <button class="btn btn-xs btn-ghost text-zinc-300 gap-1" @click="exitCrop()"><i data-lucide="x" class="w-3 h-3"></i>取消</button>
+              </div>
+            </div>
+          </div>
+
+          <video v-if="currentAsset.type === 'VIDEO'" ref="mediaEl" :src="currentAsset.activeUrl"
+                 class="w-full h-full object-contain transition-opacity duration-200" :class="{ 'opacity-0': videoTracks.length > 0 && videoTracks.every(t => t.hidden) }"
+                 controls autoplay loop
+                 @loadeddata="onMediaReady" @error="onMediaError"
+                 @play="isPlaying = true" @pause="isPlaying = false"
+                 @timeupdate="onTimeUpdate"></video>
+
+          <!-- 音频封面卡片 -->
+          <div v-if="currentAsset.type === 'AUDIO'" class="w-[80%] max-w-2xl bg-panel border border-zinc-800 rounded-2xl p-8 flex flex-col items-center shadow-2xl relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none"></div>
+            <div class="w-24 h-24 rounded-full bg-zinc-800 border-4 border-zinc-700 flex items-center justify-center mb-6 shadow-xl relative z-10">
+              <i data-lucide="music" class="w-10 h-10 text-emerald-400"></i>
+            </div>
+            <h2 class="text-xl font-bold text-white mb-2 z-10">{{ currentAsset.name }}</h2>
+            <div class="w-full h-24 z-10 mt-6 mb-6 relative">
+              <!-- V29: 真实波形画布 — min/max 峰值, 已播放部分高亮 -->
+              <wave-canvas :peaks="wavePeaks" :played="audioCardPhPct / 100" color="#34d399"></wave-canvas>
+              <!-- V26: 波形播放头位置线 — 与时间轴/传送带三端同源 -->
+              <div class="absolute top-0 bottom-0 w-[2px] bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] pointer-events-none" :style="{ left: audioCardPhPct + '%' }"></div>
+            </div>
+            <audio ref="mediaEl" :src="currentAsset.activeUrl" controls class="w-full relative z-10"
+                   @canplay="onMediaReady" @error="onMediaError"
+                   @play="isPlaying = true" @pause="isPlaying = false"
+                   @timeupdate="onTimeUpdate"></audio>
+          </div>
+
+          <!-- V27: 媒体加载错误面板 — 重试 / 缩略图兜底 / 提示切换版本 -->
+          <transition name="fade">
+            <div v-if="mediaError && currentAsset.type !== '3D'"
+                 class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-base/90 backdrop-blur-sm">
+              <div class="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                <i data-lucide="cloud-off" class="w-6 h-6 text-red-400"></i>
+              </div>
+              <div class="text-sm text-zinc-200 font-medium">媒体加载失败</div>
+              <div class="text-xs text-zinc-500 max-w-[240px] text-center leading-relaxed">版本 URL 不可达或已过期。可重试加载，或从左侧版本列表切换其他版本。</div>
+              <button class="btn btn-sm btn-primary gap-2 mt-1" @click="retryLoad">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 重新加载
+              </button>
+              <img v-if="currentAsset.thumbnail" :src="currentAsset.thumbnail"
+                   class="mt-2 w-44 rounded-lg opacity-35 border border-zinc-800" alt="缩略图兜底"
+                   onerror="this.style.display='none'" />
+            </div>
+          </transition>
+
+          <!-- B. 幕布过渡 (事件驱动状态机: load/loadeddata/canplay/3D回调 统一收口) -->
+          <transition name="fade">
+            <div v-if="isTransitioning" class="absolute inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center gap-4">
+              <span class="loading loading-spinner text-primary"></span>
+              <span class="text-xs text-zinc-500 font-mono tracking-widest">LOADING VERSION...</span>
+            </div>
+          </transition>
+
+        </div>
+
+        <!-- ================= C. 悬浮单行工具栏 ================= -->
+        <div v-show="!isEditing"
+             class="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
+             id="floating-toolbar">
+
+          <!-- 3D 药丸工具栏 -->
+          <div v-if="currentAsset.type === '3D'" class="glass-pill rounded-full px-2 py-1.5 flex items-center gap-1 relative">
+            <div class="flex items-center gap-1.5 px-3">
+              <div class="swatch swatch-gray" :class="{ active: activeSwatch === 'gray' }" @click="setSwatch('gray')"></div>
+              <div class="swatch swatch-blue" :class="{ active: activeSwatch === 'blue' }" @click="setSwatch('blue')"></div>
+              <div class="swatch swatch-orange" :class="{ active: activeSwatch === 'orange' }" @click="setSwatch('orange')"></div>
+            </div>
+            <div class="w-px h-5 bg-zinc-700/50 mx-1"></div>
+            <button class="btn btn-ghost btn-sm btn-circle" :class="wireframeOn ? 'text-primary bg-primary/10' : 'text-zinc-400 hover:text-white'" title="线框" @click="toggleWireframe"><i data-lucide="box" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost btn-sm btn-circle" :class="lightsOn ? 'text-zinc-400 hover:text-white' : 'text-primary bg-primary/10'" title="光照" @click="toggleLights"><i data-lucide="sun" class="w-4 h-4"></i></button>
+            <!-- V29: 机位预设菜单 -->
+            <div class="relative">
+              <button class="btn btn-ghost btn-sm btn-circle" :class="camMenuOpen ? 'text-primary bg-primary/10' : 'text-zinc-400 hover:text-white'" title="机位预设" @click="camMenuOpen = !camMenuOpen; matMenuOpen = false"><i data-lucide="video" class="w-4 h-4"></i></button>
+              <div v-if="camMenuOpen" class="absolute bottom-full right-0 mb-2 w-36 bg-panel/95 backdrop-blur border border-zinc-700 rounded-xl p-1.5 shadow-2xl z-50">
+                <button class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:bg-white/10 transition flex items-center gap-2" @click="camPreset('iso'); camMenuOpen = false"><i data-lucide="box" class="w-3.5 h-3.5 text-primary"></i>等轴 45°</button>
+                <button class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:bg-white/10 transition flex items-center gap-2" @click="camPreset('top'); camMenuOpen = false"><i data-lucide="arrow-down" class="w-3.5 h-3.5 text-primary"></i>顶视</button>
+                <button class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:bg-white/10 transition flex items-center gap-2" @click="camPreset('front'); camMenuOpen = false"><i data-lucide="arrow-up" class="w-3.5 h-3.5 text-primary"></i>正视</button>
+                <button class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:bg-white/10 transition flex items-center gap-2" @click="camPreset('side'); camMenuOpen = false"><i data-lucide="arrow-right" class="w-3.5 h-3.5 text-primary"></i>侧视</button>
+                <div class="h-px bg-zinc-800 my-1"></div>
+                <button class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-zinc-400 hover:bg-white/10 transition flex items-center gap-2" @click="resetCamera(); camMenuOpen = false"><i data-lucide="maximize" class="w-3.5 h-3.5"></i>重置视角</button>
+              </div>
+            </div>
+            <!-- V29: 材质快调弹层 (与编辑模式检查器同源) -->
+            <div class="relative">
+              <button class="btn btn-ghost btn-sm btn-circle" :class="matMenuOpen ? 'text-primary bg-primary/10' : 'text-zinc-400 hover:text-white'" title="材质" @click="matMenuOpen = !matMenuOpen; camMenuOpen = false"><i data-lucide="palette" class="w-4 h-4"></i></button>
+              <div v-if="matMenuOpen" class="absolute bottom-full right-0 mb-2 w-56 bg-panel/95 backdrop-blur border border-zinc-700 rounded-xl p-3 shadow-2xl z-50 space-y-3">
+                <div class="text-[10px] font-bold tracking-widest text-zinc-500">材质 MATERIAL</div>
+                <div class="flex items-center gap-2">
+                  <div class="swatch swatch-gray" :class="{ active: activeSwatch === 'gray' }" @click="setSwatch('gray')"></div>
+                  <div class="swatch swatch-blue" :class="{ active: activeSwatch === 'blue' }" @click="setSwatch('blue')"></div>
+                  <div class="swatch swatch-orange" :class="{ active: activeSwatch === 'orange' }" @click="setSwatch('orange')"></div>
+                  <span class="text-[11px] text-zinc-500 ml-1">基础色</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-zinc-400 w-12 shrink-0">金属度</span>
+                  <input type="range" min="0" max="1" step="0.01" v-model.number="matMetalness" @input="applyMaterial" class="range range-xs range-primary flex-1">
+                  <span class="text-[10px] font-mono text-zinc-400 w-8 text-right">{{ matMetalness.toFixed(2) }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-zinc-400 w-12 shrink-0">粗糙度</span>
+                  <input type="range" min="0" max="1" step="0.01" v-model.number="matRoughness" @input="applyMaterial" class="range range-xs range-primary flex-1">
+                  <span class="text-[10px] font-mono text-zinc-400 w-8 text-right">{{ matRoughness.toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+            <!-- 点击空白处关闭弹层 -->
+            <div v-if="camMenuOpen || matMenuOpen" class="fixed inset-0 z-40" @mousedown="camMenuOpen = false; matMenuOpen = false"></div>
+            <div class="w-px h-5 bg-zinc-700/50 mx-1"></div>
+            <button class="btn btn-sm btn-primary rounded-full px-5 gap-2 ml-1" @click="toggleEditMode(true)">
+              <i data-lucide="pen-tool" class="w-3.5 h-3.5"></i> 编辑
+            </button>
+          </div>
+
+          <!-- 视频/音频 药丸工具栏 -->
+          <div v-if="currentAsset.type === 'VIDEO' || currentAsset.type === 'AUDIO'" class="glass-pill rounded-full px-4 py-2 flex items-center gap-3 min-w-[500px]">
+            <button class="btn btn-ghost btn-sm btn-circle text-white media-btn" :class="{ 'is-playing': isPlaying }" @click="togglePlay">
+              <i data-lucide="play" class="w-4 h-4 icon-play"></i>
+              <i data-lucide="pause" class="w-4 h-4 icon-pause"></i>
+            </button>
+            <div class="w-px h-5 bg-zinc-700/50"></div>
+
+            <!-- 迷你预览进度 (V26: 与时间轴同源 — 位置/宽度按 秒/总时长 比例换算) -->
+            <div class="flex-1 h-8 bg-black/40 rounded border border-zinc-700/50 relative overflow-hidden">
+              <div class="absolute inset-0 ruler-bg opacity-20"></div>
+              <div v-if="currentAsset.type === 'VIDEO' && firstVideoClip"
+                   class="absolute h-4 bg-blue-600/80 rounded-sm top-1/2 -translate-y-1/2"
+                   :style="miniClipStyle(firstVideoClip)"></div>
+              <div v-if="currentAsset.type === 'VIDEO' && firstAudioClip"
+                   class="absolute h-4 bg-emerald-600/80 rounded-sm top-1/2 -translate-y-1/2"
+                   :style="miniClipStyle(firstAudioClip)"></div>
+              <div v-if="currentAsset.type === 'AUDIO' && firstAudioClip"
+                   class="absolute h-4 bg-emerald-600/80 rounded-sm top-1/2 -translate-y-1/2"
+                   :style="miniClipStyle(firstAudioClip)"></div>
+              <div class="absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_4px_#fff]" :style="{ left: miniPhPct + '%' }"></div>
+            </div>
+
+            <button class="btn btn-sm btn-primary rounded-full px-5" @click="toggleEditMode(true)">剪辑</button>
+          </div>
+
+          <!-- 图片工具栏 -->
+          <div v-if="currentAsset.type === 'IMAGE'" class="glass-pill rounded-full px-2 py-1.5 flex items-center gap-1">
+            <button class="btn btn-ghost btn-sm btn-circle text-primary bg-primary/10"><i data-lucide="move" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost btn-sm btn-circle text-zinc-400"><i data-lucide="crop" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost btn-sm btn-circle text-zinc-400"><i data-lucide="brush" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost btn-sm btn-circle text-zinc-400"><i data-lucide="layers" class="w-4 h-4"></i></button>
+            <div class="w-px h-5 bg-zinc-700/50 mx-1"></div>
+            <button class="btn btn-sm btn-primary rounded-full px-5" @click="toggleEditMode(true)">在线修图</button>
+          </div>
+        </div>
+
+        <!-- ================= D. 底部全宽编辑面板 ================= -->
+        <div v-if="isEditing" id="edit-panel" class="absolute bottom-0 left-0 right-0 bg-panel border-t border-zinc-700 flex flex-col z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.8)]"
+             :style="{ height: editorHeightPct + 'vh', transition: editorDragging ? 'none' : '' }">
+          <!-- V23: 上下拖拽手柄 — 向上拖动增大编辑器空间 (20vh ~ 70vh) -->
+          <div class="absolute -top-[4px] left-0 right-0 h-[9px] cursor-row-resize z-50 group/handle"
+               title="上下拖动调整编辑器高度" @mousedown.prevent="startEditorResize">
+            <div class="absolute left-1/2 -translate-x-1/2 top-[3px] w-16 h-[3px] rounded-full bg-zinc-700 group-hover/handle:bg-primary transition-colors"></div>
+          </div>
+
+          <!-- 面板工具栏 -->
+          <div class="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-surface">
+            <div class="flex items-center gap-2">
+              <!-- V19 模式导航: DaVinci 式页面切换, 位置恒定在面板左上角; V20 标签随资产类型分化 -->
+              <div class="flex items-center bg-black/50 rounded-full p-0.5 border border-zinc-700/60 mr-3">
+                <button class="seg-btn toolbar-btn" @click="toggleEditMode(false)">预览</button>
+                <button class="seg-btn seg-active toolbar-btn">{{ editLabel }}</button>
+              </div>
+              <!-- 时间线类操作仅 VIDEO / AUDIO 显示 -->
+              <template v-if="currentAsset.type === 'VIDEO' || currentAsset.type === 'AUDIO'">
+                <button class="btn btn-xs btn-ghost gap-1 text-zinc-300 toolbar-btn" :disabled="!selectedClip" title="在播放头处分割选中片段 (S)" @click="splitClip"><i data-lucide="scissors" class="w-3.5 h-3.5"></i> 分割</button>
+                <button class="btn btn-xs btn-ghost gap-1 text-zinc-300 toolbar-btn" :disabled="!selectedClip" title="删除选中片段 (Delete)" @click="deleteClip"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 删除</button>
+                <button class="btn btn-xs btn-ghost gap-1 text-zinc-300 toolbar-btn" title="添加字幕文本 (T)" @click="showToast('文本轨将在后续版本提供')"><i data-lucide="type" class="w-3.5 h-3.5"></i> 文本</button>
+                <button class="btn btn-xs btn-ghost gap-1 text-zinc-300 toolbar-btn" title="撤销 (Ctrl+Z)" :disabled="!undoStack.length" @click="undoEdit"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> 撤销</button>
+              </template>
+              <span v-else class="text-[11px] text-zinc-600">{{ currentAsset.type === '3D' ? '场景与材质检查器' : '实时调整，参数即时生效' }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-xs btn-outline border-zinc-600 text-zinc-300" @click="addExportJob">导出</button>
+              <button class="btn btn-xs btn-primary" @click="toggleEditMode(false)">退出编辑</button>
+            </div>
+          </div>
+
+          <!-- V22 走带控制条 (DaVinci 底部走带: 步进 + 大时间码 + FPS + 吸附 + 缩放) -->
+          <div v-if="currentAsset.type === 'VIDEO' || currentAsset.type === 'AUDIO'" class="h-10 shrink-0 border-b border-zinc-800 bg-surface/60 flex items-center gap-0.5 px-2">
+            <button class="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition" @click="seekHome" title="跳到开头 (Home)"><i data-lucide="skip-back" class="w-4 h-4"></i></button>
+            <button class="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition" @click="stepBy(-1)" title="后退 1 秒 (←)"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+            <button class="w-8 h-7 flex items-center justify-center rounded bg-primary/20 text-primary hover:bg-primary/30 transition media-btn" :class="{ 'is-playing': isPlaying }" @click="togglePlay" title="播放 / 暂停 (Space)">
+              <i data-lucide="play" class="w-4 h-4 icon-play"></i><i data-lucide="pause" class="w-4 h-4 icon-pause"></i>
+            </button>
+            <button class="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition" @click="stepBy(1)" title="前进 1 秒 (→)"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+            <button class="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition" @click="seekEnd" title="跳到结尾 (End)"><i data-lucide="skip-forward" class="w-4 h-4"></i></button>
+            <span class="font-mono text-sm font-bold bg-zinc-100 text-black rounded px-2 py-0.5 tracking-wider ml-1" title="当前时间码">{{ playheadTC }}<span class="opacity-50 font-normal"> / {{ totalTC }}</span></span>
+            <span class="badge badge-xs badge-outline border-zinc-600 text-zinc-400 ml-1">{{ projectRateBadge }}</span>
+            <div class="ml-auto flex items-center gap-2">
+              <span class="text-[10px] text-zinc-500 hidden sm:inline">吸附</span>
+              <button class="w-6 h-6 flex items-center justify-center rounded transition" :class="snapOn ? 'bg-primary/25 text-primary' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/10'" @click="snapOn = !snapOn" title="吸附到播放头 / 片段边缘">
+                <i data-lucide="magnet" class="w-3.5 h-3.5"></i>
+              </button>
+              <span class="text-[10px] text-zinc-500 hidden sm:inline">缩放</span>
+              <input type="range" min="50" max="300" step="10" v-model.number="tlZoom" class="range range-xs range-primary w-24" title="时间线缩放" />
+            </div>
+          </div>
+
+          <!-- 轨道区 (V22: 轨道头独立列 + 时间线缩放 + 检查器) -->
+          <div v-if="currentAsset.type === 'VIDEO' || currentAsset.type === 'AUDIO'" class="flex-1 flex overflow-hidden">
+            <!-- 左列: 轨道头面板 (与右侧轨道逐行对齐, 不再悬浮遮挡内容) -->
+            <div class="w-36 border-r border-zinc-800 bg-surface/50 shrink-0 flex flex-col track-head-col">
+              <div class="h-8 shrink-0 border-b border-zinc-800 flex items-end px-3 pb-1 text-[10px] font-bold tracking-widest text-zinc-600">轨道</div>
+              <div class="flex-1 overflow-hidden relative">
+                <!-- V25: 轨道头列表 — 车道滚动时同步位移, 保持逐行对齐 -->
+                <div ref="headsListEl" class="flex flex-col px-2 pt-2 space-y-2 will-change-transform">
+                  <!-- 视频轨头 v-for (右键菜单 / grip 排序 / 内联重命名) -->
+                  <template v-if="currentAsset.type === 'VIDEO'">
+                  <track-head v-for="t in videoTracks" :key="'vh' + t.id"
+                              data-track-type="video"
+                              :badge="t.name" badge-class="b-video"
+                              :count="t.clips.length" :height-px="48"
+                              :locked="t.locked" :off="t.hidden"
+                              lock-title="锁定 / 解锁视频轨" toggle-title="显示 / 隐藏视频轨"
+                              on-icon="eye" off-icon="eye-off"
+                              :editing="editingTrack && editingTrack.type === 'video' && editingTrack.trackId === t.id"
+                              :draft="editingTrack && editingTrack.draft"
+                              @update:draft="editingTrack && (editingTrack.draft = $event)"
+                              @commit-rename="commitRenameTrack" @cancel-rename="cancelRenameTrack"
+                              @ctx="openTrackMenu($event, 'video', t.id)"
+                              @reorder-start="startTrackReorder($event, 'video', t.id)"
+                              @toggle-lock="toggleTrackLock('video', t.id)" @toggle-vis="toggleTrackVis('video', t.id)"></track-head>
+                  </template>
+                  <!-- 音频轨头 v-for -->
+                  <track-head v-for="t in audioTracks" :key="'ah' + t.id"
+                              data-track-type="audio"
+                              :badge="t.name" badge-class="b-audio"
+                              :count="t.clips.length" :height-px="40"
+                              :locked="t.locked" :off="t.muted"
+                              lock-title="锁定 / 解锁音频轨" toggle-title="静音 / 取消静音"
+                              on-icon="volume-2" off-icon="volume-x"
+                              :editing="editingTrack && editingTrack.type === 'audio' && editingTrack.trackId === t.id"
+                              :draft="editingTrack && editingTrack.draft"
+                              @update:draft="editingTrack && (editingTrack.draft = $event)"
+                              @commit-rename="commitRenameTrack" @cancel-rename="cancelRenameTrack"
+                              @ctx="openTrackMenu($event, 'audio', t.id)"
+                              @reorder-start="startTrackReorder($event, 'audio', t.id)"
+                              @toggle-lock="toggleTrackLock('audio', t.id)" @toggle-vis="toggleTrackVis('audio', t.id)"></track-head>
+                  <div class="flex-1"></div>
+                </div>
+              </div>
+              <div class="shrink-0 p-2 space-y-1.5 border-t border-zinc-800/60">
+                <button v-if="currentAsset.type === 'VIDEO'" class="btn btn-xs btn-block btn-outline border-zinc-700 justify-start gap-2 text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                        :disabled="videoTracks.length >= MAX_TRACKS" @click="addTrack('video')">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> 添加视频轨
+                </button>
+                <button class="btn btn-xs btn-block btn-outline border-zinc-700 justify-start gap-2 text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                        :disabled="audioTracks.length >= MAX_TRACKS" @click="addTrack('audio')">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> 添加音频轨
+                </button>
+              </div>
+            </div>
+
+            <!-- 中列: 时间线内容 (V22: 宽度可缩放; V25: 纵向滚动, 同步轨道头列位移) -->
+            <div class="flex-1 overflow-auto" ref="laneScrollEl" @scroll="syncHeadsScroll">
+            <div class="relative min-h-full min-w-full bg-[#0a0a0c]" ref="timelineEl" :style="{ width: tlWidth + 'px', backgroundImage: gridBg, backgroundSize: gridBgSize }" @click="seekFromClick">
+              <!-- 标尺 (V26: 刻度随缩放自适应均匀间隔, 像素定位) -->
+              <div class="h-8 border-b border-zinc-800 relative flex items-center bg-black/40 cursor-col-resize sticky top-0 z-10"
+                   :style="{ backgroundImage: minorGridBg, backgroundSize: minorGridSize }" @mousedown.prevent="startDrag">
+                <span v-for="t in rulerTicks" :key="t.x" class="absolute text-[10px] font-mono text-zinc-500"
+                      :style="{ left: t.x + 'px', transform: 'translateX(4px)' }">{{ t.label }}</span>
+                <div v-for="t in rulerTicks" :key="'tick' + t.x" class="absolute bottom-0 w-px h-2 bg-zinc-600" :style="{ left: t.x + 'px' }"></div>
+              </div>
+
+              <!-- V21 播放头时间码盒: 白底黑字帧级时间码, 跟随播放头 (DaVinci 标尺上方时间码) -->
+              <div v-if="!trimTip" class="absolute top-9 z-30 left-0 -translate-x-1/2 bg-zinc-100 text-black text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm pointer-events-none whitespace-nowrap shadow-lg"
+                   :style="{ translate: Math.max(46, Math.min(phX, tlWidth - 46)) + 'px 0' }">{{ playheadTC }}</div>
+
+              <!-- 播放头 (带顶部把手, 可拖拽; V30: translate 合成层移动, 不再触发 layout) -->
+              <div class="absolute top-0 bottom-0 left-0 w-[2px] bg-primary z-20 shadow-[0_0_8px_rgba(59,130,246,0.8)] cursor-ew-resize"
+                   :style="{ translate: phX + 'px 0' }" @mousedown.prevent="startDrag">
+                <div class="absolute top-0 -left-[5px] w-3 h-3 bg-primary rounded-b-sm"></div>
+              </div>
+
+              <!-- V20 trim 时间码气泡: 修剪时显示边缘对应时间 -->
+              <div v-if="trimTip" class="absolute top-9 z-30 left-0 -translate-x-1/2 bg-black/90 border border-zinc-600 text-[10px] font-mono text-primary px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap shadow-xl"
+                   :style="{ translate: trimTip.x + 'px 0' }">{{ trimTip.text }}</div>
+
+              <!-- 轨道内容列表 (V22: 整行归片段; V25: 轨道 v-for + 跨轨拖入落点) -->
+              <div class="p-2 space-y-2">
+                <!-- 视频轨车道 v-for -->
+                <template v-if="currentAsset.type === 'VIDEO'">
+                <div v-for="t in videoTracks" :key="'vl' + t.id"
+                     class="h-12 flex items-center relative" :class="{ 'track-locked': t.locked }"
+                     data-lane-type="video" :data-lane-id="t.id" @click="onTrackRowClick">
+                  <div class="absolute inset-x-0 h-full rounded border transition-colors"
+                       :class="t.hidden ? 'bg-zinc-900/30 border-zinc-800/30' : 'bg-zinc-900/50 border-zinc-800/50'"></div>
+                  <div v-for="clip in t.clips" :key="clip.id" :data-clip-id="clip.id"
+                       class="clip-block h-10 rounded border border-blue-400/30 flex items-center px-2 pl-2 text-xs text-white shadow-lg absolute top-1/2 -translate-y-1/2 overflow-hidden"
+                       :class="[selectedLoc && selectedLoc.clipId === clip.id ? 'clip-selected' : '', draggingClipId === clip.id ? 'clip-dragging' : '', t.hidden ? 'opacity-40' : '', videoStripUrl ? 'bg-blue-900/60' : 'bg-blue-600/80 filmstrip-fallback']"
+                       :style="{ left: clip.start * ppsPx + 'px', width: clip.dur * ppsPx + 'px', backgroundImage: videoStripUrl ? 'url(' + videoStripUrl + ')' : 'none', backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }"
+                       @mousedown.prevent="startClipDrag($event, clip, 'video', t.id)"
+                       @click.stop>
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-950/70 via-transparent to-blue-950/40 pointer-events-none"></div>
+                    <i data-lucide="video" class="w-3.5 h-3.5 mr-2 text-blue-200 shrink-0 relative z-10"></i>
+                    <span class="truncate relative z-10">主视频轨.mp4</span>
+                    <div class="clip-handle left" title="修剪入点" @mousedown.prevent.stop="startClipTrim($event, clip, 'video', t.id, 'left')"></div>
+                    <div class="clip-handle right" title="修剪出点" @mousedown.prevent.stop="startClipTrim($event, clip, 'video', t.id, 'right')"></div>
+                  </div>
+                </div>
+                </template>
+
+                <!-- 音频轨车道 v-for -->
+                <div v-for="t in audioTracks" :key="'al' + t.id"
+                     class="h-10 flex items-center relative" :class="{ 'track-locked': t.locked }"
+                     data-lane-type="audio" :data-lane-id="t.id" @click="onTrackRowClick">
+                  <div class="absolute inset-x-0 h-full rounded border transition-colors"
+                       :class="t.muted ? 'bg-zinc-900/30 border-zinc-800/30' : 'bg-zinc-900/50 border-zinc-800/50'"></div>
+                  <div v-for="clip in t.clips" :key="clip.id" :data-clip-id="clip.id"
+                       class="clip-block h-8 bg-emerald-600/80 rounded border border-emerald-400/30 flex items-center px-2 pl-2 text-xs text-white shadow-lg absolute top-1/2 -translate-y-1/2"
+                       :class="{ 'clip-selected': selectedLoc && selectedLoc.clipId === clip.id, 'clip-dragging': draggingClipId === clip.id, 'opacity-40': t.muted }"
+                       :style="{ left: clip.start * ppsPx + 'px', width: clip.dur * ppsPx + 'px' }"
+                       @mousedown.prevent="startClipDrag($event, clip, 'audio', t.id)"
+                       @click.stop>
+                    <!-- V29: 真实波形画布 (min/max 峰值 + 已播放高亮 + 淡入淡出三角) -->
+                    <wave-canvas :peaks="wavePeaks" :played="clipPlayedPct(clip)" :fade-in-pct="fadePctOf(clip, 'in')"
+                                 :fade-out-pct="fadePctOf(clip, 'out')" :gain="clip.gain ?? 1" color="#34d399"></wave-canvas>
+                    <i data-lucide="music" class="w-3.5 h-3.5 mr-2 text-emerald-200 shrink-0 relative z-10"></i>
+                    <span class="truncate relative z-10">背景音乐.mp3</span>
+                    <!-- V29: 淡入/淡出拖拽手柄 — 顶角小方块, 水平拖拽调秒数 -->
+                    <div class="fade-handle left" title="拖拽设置淡入"
+                         :class="{ 'fade-active': (clip.fadeIn || 0) > 0 || (fadeDrag && fadeDrag.clipId === clip.id && fadeDrag.side === 'in') }"
+                         @mousedown.prevent.stop="startFadeDrag($event, clip, 'in')"></div>
+                    <div class="fade-handle right" title="拖拽设置淡出"
+                         :class="{ 'fade-active': (clip.fadeOut || 0) > 0 || (fadeDrag && fadeDrag.clipId === clip.id && fadeDrag.side === 'out') }"
+                         @mousedown.prevent.stop="startFadeDrag($event, clip, 'out')"></div>
+                    <div class="clip-handle left" title="修剪入点" @mousedown.prevent.stop="startClipTrim($event, clip, 'audio', t.id, 'left')"></div>
+                    <div class="clip-handle right" title="修剪出点" @mousedown.prevent.stop="startClipTrim($event, clip, 'audio', t.id, 'right')"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            <!-- 右列: 检查器 (V23: 可收起 / 展开, 窄屏自动收起) -->
+            <div class="border-l border-zinc-800 bg-surface/50 shrink-0 flex flex-col overflow-hidden transition-[width] duration-200 ease-out"
+                 :class="inspectorCollapsed ? 'w-9' : 'w-56'">
+              <div class="h-8 shrink-0 border-b border-zinc-800 flex items-center px-2 gap-1.5 text-[10px] font-bold tracking-widest text-zinc-500">
+                <button class="caret-btn" :class="{ collapsed: inspectorCollapsed }" title="收起 / 展开检查器"
+                        @click="inspectorCollapsed = !inspectorCollapsed">
+                  <i data-lucide="panel-right-close" class="w-3.5 h-3.5 icon-on"></i>
+                  <i data-lucide="panel-right-open" class="w-3.5 h-3.5 icon-off"></i>
+                </button>
+                <span v-show="!inspectorCollapsed" class="truncate">检查器</span>
+              </div>
+              <div v-show="!inspectorCollapsed" class="flex-1 flex flex-col min-h-0">
+              <div v-if="!selectedClip" class="flex-1 flex flex-col items-center justify-center gap-2 text-zinc-600 text-xs px-4 text-center">
+                <i data-lucide="mouse-pointer-2" class="w-5 h-5"></i>
+                <span>没有可检查的项目<br/>在轨道上选择一个片段</span>
+              </div>
+              <div v-else class="flex-1 p-3 space-y-3 overflow-y-auto">
+                <div class="flex items-center gap-2">
+                  <span class="track-badge" :class="selectedClip.type === 'video' ? 'b-video' : 'b-audio'">{{ selectedClip.trackName }}</span>
+                  <span class="text-xs font-bold text-zinc-200 truncate flex-1">{{ selectedClip.type === 'video' ? '主视频轨.mp4' : '背景音乐.mp3' }}</span>
+                </div>
+                <div class="space-y-1.5 text-[11px] rounded bg-[#0a0a0c] border border-zinc-800 p-2.5">
+                  <meta-row label="入点" :value="clipInTC"></meta-row>
+                  <meta-row label="出点" :value="clipOutTC"></meta-row>
+                  <meta-row label="时长" :value="clipDurTC" class="[&>span:last-child]:text-primary [&>span:last-child]:font-bold"></meta-row>
+                  <meta-row label="开始于" :value="clipStartTC"></meta-row>
+                </div>
+                <!-- V29: 音频剪辑参数 — 音量 / 淡入 / 淡出, 波形画布与手柄同源即改即见 -->
+                <div v-if="selectedClip.type === 'audio'" class="space-y-2 rounded bg-[#0a0a0c] border border-emerald-500/20 p-2.5">
+                  <div class="text-[10px] font-bold tracking-widest text-emerald-500/80">音频 AUDIO</div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-zinc-400 w-10 shrink-0">音量</span>
+                    <input type="range" min="0" max="200" step="1" v-model.number="selectedClip.clip.gain" class="range range-xs range-primary flex-1">
+                    <span class="text-[10px] font-mono text-zinc-400 w-9 text-right">{{ Math.round((selectedClip.clip.gain ?? 1) * 100) }}%</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-zinc-400 w-10 shrink-0">淡入</span>
+                    <input type="range" min="0" :max="Math.max(0.5, selectedClip.clip.dur / 2)" step="0.1" v-model.number="selectedClip.clip.fadeIn" class="range range-xs range-primary flex-1">
+                    <span class="text-[10px] font-mono text-zinc-400 w-9 text-right">{{ (selectedClip.clip.fadeIn || 0).toFixed(1) }}s</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-zinc-400 w-10 shrink-0">淡出</span>
+                    <input type="range" min="0" :max="Math.max(0.5, selectedClip.clip.dur / 2)" step="0.1" v-model.number="selectedClip.clip.fadeOut" class="range range-xs range-primary flex-1">
+                    <span class="text-[10px] font-mono text-zinc-400 w-9 text-right">{{ (selectedClip.clip.fadeOut || 0).toFixed(1) }}s</span>
+                  </div>
+                  <div class="text-[10px] text-zinc-600 leading-relaxed">也可直接拖拽轨道块顶角的黄色手柄设置淡变。</div>
+                </div>
+                <div class="flex gap-2">
+                  <button class="flex-1 px-2 py-1.5 rounded text-[11px] bg-white/5 border border-zinc-700 text-zinc-300 hover:bg-white/10 transition flex items-center justify-center gap-1" @click="splitClip">
+                    <i data-lucide="scissors" class="w-3.5 h-3.5"></i>切割
+                  </button>
+                  <button class="flex-1 px-2 py-1.5 rounded text-[11px] bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition flex items-center justify-center gap-1" @click="deleteClip">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>删除
+                  </button>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ 3D: 场景与材质检查器 (V20 编辑模式差异化) ============ -->
+          <div v-else-if="currentAsset.type === '3D'" class="flex-1 overflow-y-auto p-4">
+            <div class="grid grid-cols-2 gap-4 h-full">
+              <!-- 材质 -->
+              <div class="bg-surface/60 border border-zinc-800 rounded-xl p-4">
+                <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-3">材质 Material</div>
+                <div class="flex items-center gap-2 mb-4">
+                  <div class="swatch swatch-gray" :class="{ active: activeSwatch === 'gray' }" @click="setSwatch('gray')"></div>
+                  <div class="swatch swatch-blue" :class="{ active: activeSwatch === 'blue' }" @click="setSwatch('blue')"></div>
+                  <div class="swatch swatch-orange" :class="{ active: activeSwatch === 'orange' }" @click="setSwatch('orange')"></div>
+                  <span class="text-xs text-zinc-500 ml-2">基础色</span>
+                </div>
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="text-xs text-zinc-400 w-14 shrink-0">金属度</span>
+                  <input type="range" min="0" max="1" step="0.01" v-model.number="matMetalness" @input="applyMaterial"
+                         class="range range-xs range-primary flex-1">
+                  <span class="text-xs font-mono text-zinc-400 w-10 text-right">{{ matMetalness.toFixed(2) }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-zinc-400 w-14 shrink-0">粗糙度</span>
+                  <input type="range" min="0" max="1" step="0.01" v-model.number="matRoughness" @input="applyMaterial"
+                         class="range range-xs range-primary flex-1">
+                  <span class="text-xs font-mono text-zinc-400 w-10 text-right">{{ matRoughness.toFixed(2) }}</span>
+                </div>
+              </div>
+              <!-- 场景 -->
+              <div class="bg-surface/60 border border-zinc-800 rounded-xl p-4">
+                <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-3">场景 Scene</div>
+                <div class="flex flex-wrap gap-2">
+                  <button class="btn btn-xs gap-1" :class="wireframeOn ? 'btn-primary' : 'btn-outline border-zinc-700 text-zinc-300'" @click="toggleWireframe">
+                    <i data-lucide="box" class="w-3.5 h-3.5"></i> 线框
+                  </button>
+                  <button class="btn btn-xs gap-1" :class="lightsOn ? 'btn-outline border-zinc-700 text-zinc-300' : 'btn-primary'" @click="toggleLights">
+                    <i data-lucide="sun" class="w-3.5 h-3.5"></i> 光照
+                  </button>
+                  <button class="btn btn-xs gap-1" :class="showGrid ? 'btn-outline border-zinc-700 text-zinc-300' : 'btn-primary'" @click="toggleGrid">
+                    <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> 网格
+                  </button>
+                  <button class="btn btn-xs btn-outline border-zinc-700 text-zinc-300 gap-1" @click="resetCamera">
+                    <i data-lucide="maximize" class="w-3.5 h-3.5"></i> 重置视角
+                  </button>
+                </div>
+                <p class="text-[11px] text-zinc-600 mt-3">调整后可通过「导出」将场景参数一并存入新版本。</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ IMAGE: 图像调整面板 (V20 编辑模式差异化) ============ -->
+          <div v-else class="flex-1 overflow-y-auto p-4">
+            <div class="max-w-2xl mx-auto bg-surface/60 border border-zinc-800 rounded-xl p-4">
+              <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-3">滤镜预设 Filters</div>
+              <div class="flex flex-wrap gap-1.5 mb-4">
+                <button v-for="p in imgPresets" :key="p.name" class="btn btn-xs" :class="JSON.stringify(imgAdjust) === JSON.stringify(p.adj) ? 'btn-primary' : 'btn-outline border-zinc-700 text-zinc-300'"
+                        @click="applyImgPreset(p)">{{ p.name }}</button>
+              </div>
+              <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-3">图像调整 Adjustments</div>
+              <div class="flex items-center gap-3 mb-2" v-for="adj in [
+                  { key: 'brightness', label: '亮度' },
+                  { key: 'contrast', label: '对比度' },
+                  { key: 'saturate', label: '饱和度' },
+                  { key: 'hue', label: '色相' }]" :key="adj.key">
+                <span class="text-xs text-zinc-400 w-14 shrink-0">{{ adj.label }}</span>
+                <input type="range" :min="adj.key === 'hue' ? -180 : 0" :max="adj.key === 'hue' ? 180 : 200"
+                       v-model.number="imgAdjust[adj.key]" class="range range-xs range-primary flex-1">
+                <span class="text-xs font-mono text-zinc-400 w-12 text-right">{{ imgAdjust[adj.key] }}</span>
+              </div>
+              <div class="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-800">
+                <button class="btn btn-xs btn-outline border-zinc-700 text-zinc-300 gap-1" @click="imgRotate = (imgRotate - 90) % 360"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 左旋</button>
+                <button class="btn btn-xs btn-outline border-zinc-700 text-zinc-300 gap-1" @click="imgRotate = (imgRotate + 90) % 360"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> 右旋</button>
+                <button class="btn btn-xs btn-outline border-zinc-700 text-zinc-300 gap-1" @click="imgFlipX = !imgFlipX"><i data-lucide="flip-horizontal-2" class="w-3.5 h-3.5"></i> 水平翻转</button>
+                <button class="btn btn-xs btn-outline border-zinc-700 gap-1" :class="cropMode ? 'btn-primary' : 'text-zinc-300'" @click="cropMode = !cropMode; cropApplied = false"><i data-lucide="crop" class="w-3.5 h-3.5"></i> 裁切</button>
+                <button class="btn btn-xs btn-ghost text-zinc-400 ml-auto" @click="resetImgAdjust">重置</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const { createApp, ref, computed, nextTick, watch, onMounted } = Vue;
+
+// === Mock 数据 (V15: 全量 4 资产, 统一 versions + activeUrl, 保留 source.type) ===
+const MOCK_ASSETS = [
+  {
+    uuid: "3d-8f4b2c1a-9d3e", tags: ["神兽", "PBR", "青丘山系"], type: "3D", format: "GLB", name: "青丘山神兽·灌灌",
+    thumbnail: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop",
+    prompt: "灌灌，青丘山，状如鸠，其音若呵，佩之不惑。",
+    current_version: "v2.0",
+    url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    activeUrl: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    versions: [
+      { tag: "v2.0", date: "2026-11-03", note: "优化 PBR 材质", url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+        format: "GLB", meta: { tris: "20,480", verts: "10,336", texture: "2K PBR", mat: "Metallic-Roughness", format: "glTF 2.0 (二进制 GLB)", size: "4.2 MB" } },
+      { tag: "v1.0", date: "2026-11-02", note: "初始生成", url: "https://threejs.org/examples/models/gltf/Flamingo.glb",
+        format: "glTF", meta: { tris: "20,480", verts: "10,336", texture: "1K 基础色", mat: "Metallic-Roughness", format: "glTF 2.0 + BIN (分离式)", size: "6.8 MB" } }
+    ],
+    source: { type: "api", engine: "腾讯云混元3D API", account: "企业主账号" }
+  },
+  {
+    uuid: "video-2a3b4c5d-6e7f", tags: ["赛博朋克", "城市", "第一人称"], type: "VIDEO", format: "MP4", name: "赛博朋克城市漫游",
+    thumbnail: "https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=600&auto=format&fit=crop",
+    prompt: "霓虹灯闪烁的雨夜，第一人称视角穿梭在赛博城市。",
+    current_version: "v2.0",
+    url: "https://www.w3schools.com/html/mov_bbb.mp4",
+    activeUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    versions: [
+      { tag: "v2.0", date: "2026-11-03", note: "高清重制", url: "https://www.w3schools.com/html/mov_bbb.mp4",
+        format: "MP4", meta: { resolution: "1280 × 720", fps: "24", codec: "H.264 / AAC", bitrate: "8 Mbps", size: "1.1 MB", duration: "0:10" } },
+      { tag: "v1.0", date: "2026-11-01", note: "草稿版本", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        format: "MOV", meta: { resolution: "1280 × 720", fps: "24", codec: "Apple ProRes 422", bitrate: "25 Mbps", size: "3.4 MB", duration: "0:05" } }
+    ],
+    source: { type: "local", engine: "本地 ComfyUI", account: "RTX 4090" }
+  },
+  {
+    uuid: "audio-1a2b3c4d-5e6f", tags: ["仙侠", "BGM", "空灵"], type: "AUDIO", format: "MP3", name: "空灵仙侠背景音乐",
+    thumbnail: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=600&auto=format&fit=crop",
+    prompt: "古筝、竹笛，空灵缥缈，适合修仙场景的背景音乐。",
+    current_version: "v3.0",
+    url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    activeUrl: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    versions: [
+      { tag: "v3.0", date: "2026-11-02", note: "混音终版", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+        format: "MP3", meta: { sampleRate: "44.1 kHz", channels: "立体声 2.0", codec: "MP3", bitrate: "320 kbps", duration: "0:41" } },
+      { tag: "v2.0", date: "2026-10-30", note: "增加竹笛声部", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        format: "WAV", meta: { sampleRate: "48 kHz", channels: "立体声 2.0", codec: "WAV / PCM", bitrate: "24 bit", duration: "3:26" } },
+      { tag: "v1.0", date: "2026-10-28", note: "初始生成", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        format: "MP3", meta: { sampleRate: "44.1 kHz", channels: "单声道", codec: "MP3", bitrate: "128 kbps", duration: "3:26" } }
+    ],
+    source: { type: "api", engine: "Suno AI API", account: "生成节点 A" }
+  },
+  {
+    uuid: "img-9e8d7c6b-5a4f", tags: ["仙侠", "水墨", "场景概念"], type: "IMAGE", format: "PNG", name: "古风仙侠场景设计",
+    thumbnail: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=600&auto=format&fit=crop",
+    prompt: "群山连绵，云雾缭绕，仙鹤飞过，水墨画风格。",
+    current_version: "v1.2",
+    url: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+    activeUrl: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+    versions: [
+      { tag: "v1.2", date: "2026-11-01", note: "提升分辨率", url: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+        format: "PNG", meta: { resolution: "2048 × 2048", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "PNG-24 (无损)", size: "5.8 MB" } },
+      { tag: "v1.0", date: "2026-10-29", note: "初始生成", url: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=800",
+        format: "JPG", meta: { resolution: "1024 × 1024", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "JPEG (Q90 有损)", size: "0.9 MB" } }
+    ],
+    source: { type: "web", engine: "Midjourney Web", account: "备用账号 B" }
+  },
+  {
+    uuid: "video-5f6a7b8c-9d0e", tags: ["夜景", "机甲", "赛博朋克"], type: "VIDEO", format: "MP4", name: "霓虹夜市机甲巡游",
+    thumbnail: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=600&auto=format&fit=crop",
+    prompt: "巨型机甲穿行于霓虹夜市，雨夜反射，人群仰视。",
+    current_version: "v1.0", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    activeUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    versions: [
+      { tag: "v1.0", date: "2026-11-03", note: "初始生成", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        format: "MP4", meta: { resolution: "1920 × 1080", fps: "30", codec: "H.264 / AAC", bitrate: "12 Mbps", size: "2.8 MB", duration: "0:05" } }
+    ],
+    source: { type: "api", engine: "Runway Gen-3", account: "团队席位" }
+  },
+  {
+    uuid: "img-2b3c4d5e-6f7a", tags: ["国风", "水墨", "场景概念"], type: "IMAGE", format: "PNG", name: "江南水乡概念稿",
+    thumbnail: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=600&auto=format&fit=crop",
+    prompt: "江南水乡，晨雾，白墙黛瓦，留白构图。",
+    current_version: "v1.0", url: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200",
+    activeUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200",
+    versions: [
+      { tag: "v1.0", date: "2026-11-02", note: "初始生成", url: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200",
+        format: "PNG", meta: { resolution: "2048 × 1152", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "PNG-24 (无损)", size: "4.1 MB" } }
+    ],
+    source: { type: "web", engine: "Midjourney Web", account: "主账号" }
+  },
+  {
+    uuid: "audio-7c8d9e0f-1a2b", tags: ["氛围", "电子", "BGM"], type: "AUDIO", format: "MP3", name: "深海氛围电子音景",
+    thumbnail: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?q=80&w=600&auto=format&fit=crop",
+    prompt: "低频脉冲、水泡采样、缓慢铺底，深海氛围。",
+    current_version: "v1.0", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    activeUrl: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    versions: [
+      { tag: "v1.0", date: "2026-11-02", note: "初始生成", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+        format: "MP3", meta: { sampleRate: "44.1 kHz", channels: "立体声 2.0", codec: "MP3", bitrate: "256 kbps", duration: "0:41" } }
+    ],
+    source: { type: "api", engine: "Suno AI API", account: "企业主账号" }
+  },
+  {
+    uuid: "3d-9a8b7c6d-5e4f", tags: ["硬表面", "机甲", "PBR"], type: "3D", format: "GLB", name: "重装巡游者机甲",
+    thumbnail: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600&auto=format&fit=crop",
+    prompt: "硬表面机甲，磨损做旧，重型装备挂载。",
+    current_version: "v1.0", url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    activeUrl: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    versions: [
+      { tag: "v1.0", date: "2026-11-01", note: "初始生成", url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+        format: "GLB", meta: { tris: "48,220", verts: "24,118", texture: "4K PBR", mat: "Metallic-Roughness", format: "glTF 2.0 (二进制 GLB)", size: "9.6 MB" } }
+    ],
+    source: { type: "api", engine: "腾讯云混元3D API", account: "团队席位" }
+  },
+  {
+    uuid: "img-4e5f6a7b-8c9d", tags: ["角色", "国风", "原画"], type: "IMAGE", format: "JPG", name: "剑仙角色立绘",
+    thumbnail: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=600&auto=format&fit=crop&sat=-100",
+    prompt: "白衣剑仙，御剑而立，长袍飘逸，工笔重彩。",
+    current_version: "v1.0", url: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+    activeUrl: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+    versions: [
+      { tag: "v1.0", date: "2026-10-31", note: "初始生成", url: "https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=1200",
+        format: "JPG", meta: { resolution: "1536 × 2048", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "JPEG (Q92 有损)", size: "1.8 MB" } }
+    ],
+    source: { type: "web", engine: "Midjourney Web", account: "备用账号 B" }
+  },
+  {
+    uuid: "video-8b9c0d1e-2f3a", tags: ["自然", "航拍", "氛围"], type: "VIDEO", format: "MP4", name: "海岸线航拍长镜头",
+    thumbnail: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=600&auto=format&fit=crop&blur=2",
+    prompt: "黄昏海岸线航拍，一镜到底，浪涛与礁石。",
+    current_version: "v1.0", url: "https://www.w3schools.com/html/mov_bbb.mp4",
+    activeUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    versions: [
+      { tag: "v1.0", date: "2026-10-30", note: "初始生成", url: "https://www.w3schools.com/html/mov_bbb.mp4",
+        format: "MP4", meta: { resolution: "3840 × 2160", fps: "60", codec: "H.265 / AAC", bitrate: "45 Mbps", size: "1.1 MB", duration: "0:10" } }
+    ],
+    source: { type: "api", engine: "Runway Gen-3", account: "按量付费" }
+  },
+  {
+    uuid: "audio-3d4e5f6a-7b8c", tags: ["国风", "氛围", "器乐"], type: "AUDIO", format: "WAV", name: "古琴禅修氛围曲",
+    thumbnail: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=600&auto=format&fit=crop&sat=-80",
+    prompt: "古琴独奏，松涛为背景，极简留白。",
+    current_version: "v1.0", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    activeUrl: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    versions: [
+      { tag: "v1.0", date: "2026-10-29", note: "初始生成", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+        format: "WAV", meta: { sampleRate: "48 kHz", channels: "立体声 2.0", codec: "PCM 24-bit", bitrate: "2.3 Mbps", duration: "0:41" } }
+    ],
+    source: { type: "local", engine: "本地 ComfyUI", account: "RTX 4090" }
+  },
+  {
+    uuid: "img-6a7b8c9d-0e1f", tags: ["场景概念", "科幻", "氛围"], type: "IMAGE", format: "PNG", name: "废弃空间站概念图",
+    thumbnail: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=600&auto=format&fit=crop",
+    prompt: "废弃空间站内部，冷光应急灯，漂浮残骸。",
+    current_version: "v1.0", url: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=1200",
+    activeUrl: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=1200",
+    versions: [
+      { tag: "v1.0", date: "2026-10-28", note: "初始生成", url: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=1200",
+        format: "PNG", meta: { resolution: "2560 × 1440", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "PNG-24 (无损)", size: "6.2 MB" } }
+    ],
+    source: { type: "web", engine: "Midjourney Web", account: "主账号" }
+  },
+  {
+    uuid: "video-1c2d3e4f-5a6b", tags: ["城市", "夜景", "第一人称"], type: "VIDEO", format: "MOV", name: "天台俯瞰城市夜景",
+    thumbnail: "https://images.unsplash.com/photo-1514565131-fce0801e5785?q=80&w=600&auto=format&fit=crop",
+    prompt: "天台第一人称俯瞰，城市灯海，延时感。",
+    current_version: "v1.0", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    activeUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    versions: [
+      { tag: "v1.0", date: "2026-10-27", note: "初始生成", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        format: "MOV", meta: { resolution: "1920 × 1080", fps: "24", codec: "Apple ProRes 422", bitrate: "25 Mbps", size: "3.4 MB", duration: "0:05" } }
+    ],
+    source: { type: "local", engine: "本地 ComfyUI", account: "RTX 4090" }
+  },
+  {
+    uuid: "audio-9f0a1b2c-3d4e", tags: ["电子", "律动", "BGM"], type: "AUDIO", format: "MP3", name: "赛博律动循环段",
+    thumbnail: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
+    prompt: "118 BPM 合成器律动，适合作为短视频背景。",
+    current_version: "v1.0", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    activeUrl: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+    versions: [
+      { tag: "v1.0", date: "2026-10-26", note: "初始生成", url: "https://mdn.github.io/webaudio-examples/audio-analyser/viper.mp3",
+        format: "MP3", meta: { sampleRate: "44.1 kHz", channels: "立体声 2.0", codec: "MP3", bitrate: "320 kbps", duration: "0:41" } }
+    ],
+    source: { type: "api", engine: "Suno AI API", account: "团队席位" }
+  },
+  {
+    uuid: "3d-5e6f7a8b-9c0d", tags: ["角色", "PBR", "生物"], type: "3D", format: "GLB", name: "灵狐生物模型",
+    thumbnail: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop",
+    prompt: "九尾灵狐，毛发质感，待机动画。",
+    current_version: "v1.0", url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    activeUrl: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+    versions: [
+      { tag: "v1.0", date: "2026-10-25", note: "初始生成", url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+        format: "GLB", meta: { tris: "32,540", verts: "16,402", texture: "2K PBR", mat: "Metallic-Roughness", format: "glTF 2.0 (二进制 GLB)", size: "5.5 MB" } }
+    ],
+    source: { type: "api", engine: "腾讯云混元3D API", account: "企业主账号" }
+  },
+  {
+    uuid: "img-8c9d0e1f-2a3b", tags: ["水墨", "自然", "场景概念"], type: "IMAGE", format: "JPG", name: "云雾山谷写生",
+    thumbnail: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=600&auto=format&fit=crop",
+    prompt: "云雾缭绕的山谷，远山如黛，水墨写生风。",
+    current_version: "v1.0", url: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1200",
+    activeUrl: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1200",
+    versions: [
+      { tag: "v1.0", date: "2026-10-24", note: "初始生成", url: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1200",
+        format: "JPG", meta: { resolution: "2048 × 1365", bitDepth: "8 bit / 通道", colorSpace: "sRGB IEC61966-2.1", format: "JPEG (Q90 有损)", size: "1.2 MB" } }
+    ],
+    source: { type: "web", engine: "Midjourney Web", account: "备用账号 B" }
+  }
+];
+
+// === V23: 元数据 Schema (按类型定义字段, 渲染层与数据层解耦) ===
+const META_SCHEMAS = {
+  "3D":    [["tris", "三角面"], ["verts", "顶点数"], ["texture", "贴图"], ["mat", "材质流程"], ["format", "封装格式"], ["size", "文件大小"]],
+  VIDEO:   [["resolution", "分辨率"], ["fps", "帧率"], ["codec", "视频编码"], ["bitrate", "码率"], ["size", "文件大小"]],
+  AUDIO:   [["sampleRate", "采样率"], ["channels", "声道布局"], ["codec", "音频编码"], ["bitrate", "码率 / 位深"], ["duration", "时长"]],
+  IMAGE:   [["resolution", "分辨率"], ["bitDepth", "位深"], ["colorSpace", "色彩空间"], ["format", "编码格式"], ["size", "文件大小"]]
+};
+// 取版本对象: byUrl=true 按当前激活 URL (查看器内切换后联动), 否则按 current_version (资产卡)
+function versionOf(asset, byUrl) {
+  if (!asset || !asset.versions) return null;
+  return asset.versions.find(v => byUrl ? v.url === asset.activeUrl : v.tag === asset.current_version) || asset.versions[0];
+}
+// Schema 驱动的元数据行: [key, label, value]; 缺失字段显示 "—"
+function metaRowsOf(asset, byUrl) {
+  const v = versionOf(asset, byUrl);
+  const m = (v && v.meta) || (asset && asset.meta) || {};
+  return (META_SCHEMAS[asset.type] || []).map(([k, label]) => [k, label, m[k] ?? "—"]);
+}
+
+const app = createApp({
+  setup() {
+    const currentView = ref('library');
+    const currentAsset = ref(null);   // 单一真相源: 查看器显隐只由它驱动
+    const isEditing = ref(false);
+    const showGrid = ref(true);
+    const toasts = ref([]);
+    const isTransitioning = ref(false);
+    // V24/V27: 过渡幕布超时兜底 —— 正常由媒体 load/canplay 事件收口; 8s 未收口则警告 + 错误面板可重试
+    let transitionTimer = null;
+    let transitionToastId = null; // V29: 超时警告 toast 的句柄 — 加载最终成功时撤销, 消除误报
+    const mediaError = ref(false); // V27: 媒体加载失败态 (错误面板 + 重试按钮)
+    const armTransition = () => {
+      isTransitioning.value = true;
+      clearTimeout(transitionTimer);
+      transitionToastId = null;
+      transitionTimer = setTimeout(() => {
+        isTransitioning.value = false;
+        transitionToastId = showToast('加载超时，请检查网络后重试', 'warn');
+        if (currentAsset.value && currentAsset.value.type !== '3D' && !mediaDuration.value) mediaError.value = true;
+      }, 8000);
+    };
+    const clearTransition = () => {
+      clearTimeout(transitionTimer);
+      isTransitioning.value = false;
+      if (transitionToastId) { dismissToast(transitionToastId); transitionToastId = null; } // V29: 迟到成功 → 撤掉误报
+    };
+    // V27: 重试加载 — 媒体 reload / 3D 重走加载管线, 重挂幕布
+    const retryLoad = () => {
+      const asset = currentAsset.value;
+      if (!asset) return;
+      mediaError.value = false;
+      armTransition();
+      if (asset.type === '3D') {
+        const loadId = ++currentLoadId;
+        nextTick(() => load3DModel(asset.activeUrl, loadId));
+        return;
+      }
+      const m = mediaEl.value;
+      if (m) m.load(); // 以当前 src 重新发起请求
+    };
+    const activeSwatch = ref('gray');
+    // V29: 模型包围信息 (相机预设定位) + 查看器弹层状态
+    const modelInfo = ref(null); // { sizeY, maxDim }
+    const camMenuOpen = ref(false);
+    const matMenuOpen = ref(false);
+    const camPreset = (name) => { // GSAP 平滑飞到预设机位, 目标点取模型中心
+      if (!camera || !controls || !modelInfo.value) return;
+      const R = Math.max(modelInfo.value.maxDim, 0.6);
+      const cy = modelInfo.value.sizeY / 2;
+      const presets = {
+        iso:   [0, cy + R * 0.95, R * 2.0],
+        top:   [0, cy + R * 2.3, 0.02],   // 微偏避免万向锁极点
+        front: [0, cy + R * 0.3, R * 2.3],
+        side:  [R * 2.3, cy + R * 0.3, 0],
+      };
+      const p = presets[name];
+      if (!p) return;
+      const proxy = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+      gsap.to(proxy, {
+        x: p[0], y: p[1], z: p[2], duration: 0.7, ease: 'power3.inOut',
+        onUpdate: () => { camera.position.set(proxy.x, proxy.y, proxy.z); controls.target.set(0, cy, 0); controls.update(); requestRender(); },
+      });
+    };
+
+    // === V18: 播放器联动 / 播放头拖拽 / 线框光照 ===
+    const isPlaying = ref(false);
+    // === V26: 统一时间模型 — 秒为唯一单位; 播放头/刻度/片段/传送带 一套 timeToX 换算 ===
+    const phTime = ref(0);                 // 播放头主状态 (秒): 媒体回传 / 刻度点击 / 拖拽 / 走带 四端写入
+    const wireframeOn = ref(false);
+    const lightsOn = ref(true);
+    const mediaEl = ref(null);
+    const timelineEl = ref(null);
+    let draggingPlayhead = false;
+    let lastPhEvt = null; // V30: 播放头拖拽 rAF 节流的最新事件缓存
+
+    // === V25: 多轨道数据模型 — 轨道数组化, 片段归属轨道; 选中态 = {type, trackId, clipId} ===
+    // === V26: 片段 = { id, start, dur } (秒) — 位置/宽度由 秒 × 像素/秒 换算, 不再用写死百分比 ===
+    const MAX_TRACKS = 6;
+    const videoTracks = ref([{ id: 1, name: 'V1', locked: false, hidden: false, clips: [{ id: 1, start: 0, dur: 10 }] }]);
+    const audioTracks = ref([{ id: 1, name: 'A1', locked: false, muted: false, clips: [{ id: 1, start: 0, dur: 206, gain: 1, fadeIn: 0, fadeOut: 0 }] }]);
+    let nextTrackId = 2;
+    let nextClipId = 2;
+    const selectedLoc = ref(null);         // { type: 'video'|'audio', trackId, clipId }
+    const draggingClipId = ref(null);
+    let clipDrag = null;                   // 进行中的 clip 拖拽会话
+    let suppressRowDeselect = false;       // 拖拽结束后抑制行点击的取消选中
+    let suppressSeekAfterDrag = false;     // 拖拽结束后抑制时间线点击 seek
+    let scrubRafPending = false;
+    // V25: 轨道操作状态
+    const trackMenu = ref(null);           // 右键菜单 { x, y, type, trackId }
+    const editingTrack = ref(null);        // 重命名中 { type, trackId, draft }
+    let trackDrag = null;                  // 轨道头排序拖拽会话 { type, trackId }
+    // V25: 轨道寻址助手
+    const tracksOf = (type) => type === 'video' ? videoTracks : audioTracks;
+    const findTrack = (type, trackId) => tracksOf(type).value.find(t => t.id === trackId);
+    const allClips = (type) => tracksOf(type).value.flatMap(t => t.clips);
+    const isTrackLocked = (type, trackId) => !!findTrack(type, trackId)?.locked;
+    // 重编号只覆盖默认名(V1/A1 模式); 用户自定义名(如 主轨)保留
+    const renumberTracks = (type) => tracksOf(type).value.forEach((t, i) => {
+      if (/^[VA]\d+$/.test(t.name)) t.name = (type === 'video' ? 'V' : 'A') + (i + 1);
+    });
+    const firstVideoClip = computed(() => videoTracks.value[0]?.clips[0] ?? null);
+    const firstAudioClip = computed(() => audioTracks.value[0]?.clips[0] ?? null);
+    // ===== V20: 渲染队列 =====
+    const exportJobs = ref([]);
+    const showQueue = ref(false);
+    let exportSeq = 0;
+    let queueRendering = false;
+    function addExportJob() {
+      exportSeq++;
+      const asset = currentAsset.value;
+      const label = { VIDEO: '封面帧 PNG', AUDIO: '混音 WAV', IMAGE: '合成 PNG', '3D': '视口 PNG' }[asset.type] || '文件';
+      exportJobs.value.push({ id: exportSeq, name: `${asset.name} · ${label}`, status: 'queued', progress: 0, asset });
+      showQueue.value = true;
+      showToast(`已加入渲染队列（#${exportSeq}）`, 'success');
+      pumpQueue();
+    }
+    // ===== V31: 真实导出管线 — 合成/混音/截图落盘, 队列串行执行 =====
+    const fmtSize = (n) => !n ? '' : (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB');
+    function downloadBlob(blob, filename) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    function finishJob(job, blob, filename) {
+      job.url = URL.createObjectURL(blob); job.fileName = filename; job.size = blob.size;
+      job.progress = 100; job.status = 'done';
+      showToast(`导出完成：${filename}`, 'success');
+      downloadBlob(blob, filename); // 完成即落盘, 队列内可再次下载
+      return job;
+    }
+    function encodeWAV(chans, sr) { // Float32Array 通道 → 16bit PCM RIFF
+      const nCh = chans.length, len = chans[0].length, bytes = 44 + len * nCh * 2;
+      const ab = new ArrayBuffer(bytes), v = new DataView(ab);
+      const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      ws(0, 'RIFF'); v.setUint32(4, bytes - 8, true); ws(8, 'WAVE'); ws(12, 'fmt ');
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, nCh, true);
+      v.setUint32(24, sr, true); v.setUint32(28, sr * nCh * 2, true); v.setUint16(32, nCh * 2, true); v.setUint16(34, 16, true);
+      ws(36, 'data'); v.setUint32(40, len * nCh * 2, true);
+      let o = 44;
+      for (let i = 0; i < len; i++) for (let c = 0; c < nCh; c++) {
+        const s = Math.max(-1, Math.min(1, chans[c][i]));
+        v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2;
+      }
+      return new Blob([ab], { type: 'audio/wav' });
+    }
+    async function exportImageFile(job) { // 源矩形裁切 + 滤镜 + 旋转/翻转 → PNG
+      const url = job.asset.activeUrl;
+      let bmp;
+      try { const r = await fetch(url, { mode: 'cors' }); bmp = await createImageBitmap(await r.blob()); }
+      catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => rej(new Error('图像加载失败')); i.src = url; }); }
+      const natW = bmp.width, natH = bmp.height;
+      const c = cropApplied.value ? cropRect.value : { x: 0, y: 0, w: 100, h: 100 };
+      const sx = c.x / 100 * natW, sy = c.y / 100 * natH, sw = c.w / 100 * natW, sh = c.h / 100 * natH;
+      const rot = ((imgRotate.value % 360) + 360) % 360, swap = rot === 90 || rot === 270;
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(swap ? sh : sw)); cv.height = Math.max(1, Math.round(swap ? sw : sh));
+      const ctx = cv.getContext('2d');
+      ctx.filter = imgFilterStr.value;
+      ctx.translate(cv.width / 2, cv.height / 2); ctx.rotate(rot * Math.PI / 180); ctx.scale(imgFlipX.value ? -1 : 1, 1);
+      ctx.drawImage(bmp, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('画布被跨域污染, 无法导出');
+      return finishJob(job, blob, `${job.asset.name}_edited.png`);
+    }
+    async function exportAudioFile(job) { // 离线上下文混音: 多轨剪辑 × 音量 × 淡入淡出 → WAV
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const ab = await (await fetch(job.asset.activeUrl, { mode: 'cors' })).arrayBuffer();
+      const buf = await ac.decodeAudioData(ab); ac.close();
+      const dur = Math.max(tlDuration.value || 0, 1), sr = 44100, nCh = Math.min(2, buf.numberOfChannels);
+      const off = new OfflineAudioContext(nCh, Math.ceil(dur * sr), sr);
+      audioTracks.value.forEach(t => {
+        if (t.muted) return;
+        t.clips.forEach(c => {
+          const src = off.createBufferSource(); src.buffer = buf;
+          const g = off.createGain(), gv = c.gain ?? 1, t0 = c.start, t1 = c.start + c.dur;
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(gv, t0 + (c.fadeIn || 0));
+          g.gain.setValueAtTime(gv, Math.max(t0, t1 - (c.fadeOut || 0)));
+          g.gain.linearRampToValueAtTime(0, t1);
+          src.connect(g); g.connect(off.destination);
+          src.start(Math.max(0, t0), 0, c.dur);
+        });
+      });
+      const rendered = await off.startRendering();
+      const chans = []; for (let i = 0; i < rendered.numberOfChannels; i++) chans.push(rendered.getChannelData(i));
+      return finishJob(job, encodeWAV(chans, sr), `${job.asset.name}_mix.wav`);
+    }
+    async function exportVideoPoster(job) { // 播放头所在帧 → 封面 PNG
+      const v = mediaEl.value;
+      if (!v || !v.videoWidth) throw new Error('视频未就绪');
+      const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
+      cv.getContext('2d').drawImage(v, 0, 0);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('画布被跨域污染, 无法导出');
+      return finishJob(job, blob, `${job.asset.name}_poster.png`);
+    }
+    function export3DScreenshot(job) { // 单帧渲染完成后同帧截屏 (无 preserveDrawingBuffer 依赖)
+      return new Promise((res, rej) => {
+        if (!renderer || !renderer.domElement) return rej(new Error('3D 视口未就绪'));
+        renderOnceAndThen(() => renderer.domElement.toBlob(
+          b => b ? res(finishJob(job, b, `${job.asset.name}_view.png`)) : rej(new Error('截图失败')), 'image/png'));
+      });
+    }
+    const EXPORTERS = { IMAGE: exportImageFile, AUDIO: exportAudioFile, VIDEO: exportVideoPoster, '3D': export3DScreenshot };
+    async function pumpQueue() {
+      if (queueRendering) return;
+      const job = exportJobs.value.find(j => j.status === 'queued');
+      if (!job) return;
+      queueRendering = true;
+      job.status = 'rendering';
+      const tick = setInterval(() => { if (job.status === 'rendering') job.progress = Math.min(95, job.progress + 4 + Math.random() * 9); }, 200);
+      try {
+        await EXPORTERS[job.asset.type](job);
+      } catch (e) {
+        job.status = 'error'; job.error = e.message || '导出失败';
+        showToast(`导出失败：${job.error}`, 'error');
+      } finally {
+        clearInterval(tick);
+        queueRendering = false;
+        pumpQueue();
+      }
+    }
+    function downloadJob(job) { // 队列内再次下载
+      if (!job.url || !job.fileName) return;
+      const a = document.createElement('a');
+      a.href = job.url; a.download = job.fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    function clearDoneJobs() {
+      exportJobs.value.forEach(j => { if (j.url && j.status === 'done') URL.revokeObjectURL(j.url); });
+      exportJobs.value = exportJobs.value.filter(j => j.status !== 'done');
+    }
+    // ===== V20: 3D 材质检查器 =====
+    const matMetalness = ref(0.5);
+    const matRoughness = ref(0.5);
+    function applyMaterial() {
+      if (currentModel) {
+        currentModel.traverse(obj => {
+          if (obj.isMesh && obj.material) {
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            mats.forEach(m => {
+              if ('metalness' in m) m.metalness = matMetalness.value;
+              if ('roughness' in m) m.roughness = matRoughness.value;
+            });
+          }
+        });
+      }
+      requestRender(); // V30: 按需渲染
+    }
+    // ===== V20: 图片调整 =====
+    const imgAdjust = ref({ brightness: 100, contrast: 100, saturate: 100, hue: 0 });
+    const imgRotate = ref(0);
+    const imgFlipX = ref(false);
+    const imgFilterStr = computed(() =>
+      `brightness(${imgAdjust.value.brightness}%) contrast(${imgAdjust.value.contrast}%) saturate(${imgAdjust.value.saturate}%) hue-rotate(${imgAdjust.value.hue}deg)`);
+    const imgTransform = computed(() =>
+      `rotate(${imgRotate.value}deg) scaleX(${imgFlipX.value ? -1 : 1})`);
+    function resetImgAdjust() {
+      imgAdjust.value = { brightness: 100, contrast: 100, saturate: 100, hue: 0 };
+      imgRotate.value = 0;
+      imgFlipX.value = false;
+      exitCrop(false); // V29: 重置同时撤掉未应用的裁切
+    }
+    // V29: 滤镜预设 — 一键风格化 (值写入 imgAdjust, 滑杆/预览同源联动)
+    const imgPresets = [
+      { name: '原图', adj: { brightness: 100, contrast: 100, saturate: 100, hue: 0 } },
+      { name: '胶片', adj: { brightness: 104, contrast: 118, saturate: 82, hue: 0 } },
+      { name: '黑白', adj: { brightness: 102, contrast: 112, saturate: 0, hue: 0 } },
+      { name: '冷调', adj: { brightness: 100, contrast: 104, saturate: 108, hue: -14 } },
+      { name: '暖调', adj: { brightness: 103, contrast: 100, saturate: 118, hue: 12 } },
+      { name: '反差', adj: { brightness: 96, contrast: 138, saturate: 110, hue: 0 } },
+    ];
+    const applyImgPreset = (p) => { imgAdjust.value = { ...p.adj }; showToast(`滤镜：${p.name}`, 'info'); };
+    // V29: 裁切模式 — 遮罩 + 可调裁切框, 应用后 clip-path 落到 img
+    const cropMode = ref(false);
+    const cropRect = ref({ x: 10, y: 10, w: 80, h: 80 }); // 百分比 (相对图像显示框)
+    const cropAspect = ref(null); // null 自由 | '1:1' | '4:3' | '16:9'
+    const cropApplied = ref(false);
+    const cropClipPath = computed(() => {
+      const r = cropRect.value;
+      const t = Math.max(0, r.y), b = Math.max(0, 100 - r.y - r.h);
+      const l = Math.max(0, r.x), rt = Math.max(0, 100 - r.x - r.w);
+      return `inset(${t}% ${rt}% ${b}% ${l}%)`;
+    });
+    const cropBoxStyle = computed(() => {
+      const r = cropRect.value;
+      return { left: r.x + '%', top: r.y + '%', width: r.w + '%', height: r.h + '%' };
+    });
+    function setCropAspect(a) {
+      cropAspect.value = a;
+      if (!a) return;
+      const [aw, ah] = a.split(':').map(Number);
+      const r = cropRect.value;
+      // 保持中心, 按图像框近似比例 (显示框接近方形时略失真, 原型可接受)
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      let w = r.w, h = w * ah / aw;
+      if (h > 100) { h = 100; w = h * aw / ah; }
+      cropRect.value = { x: Math.min(100 - w, Math.max(0, cx - w / 2)), y: Math.min(100 - h, Math.max(0, cy - h / 2)), w, h };
+    }
+    function startCropMove(e) { // 拖动裁切框主体 = 平移
+      e.preventDefault();
+      const box = e.currentTarget.parentElement.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY, r0 = { ...cropRect.value };
+      const onMove = (ev) => {
+        const r = cropRect.value;
+        r.x = Math.min(100 - r.w, Math.max(0, r0.x + (ev.clientX - sx) / box.width * 100));
+        r.y = Math.min(100 - r.h, Math.max(0, r0.y + (ev.clientY - sy) / box.height * 100));
+      };
+      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+      window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    }
+    function startCropResize(e, dir) { // dir 含 n/s/e/w 组合, 角部双向
+      e.preventDefault(); e.stopPropagation();
+      const box = e.currentTarget.closest('.crop-layer').getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY, r0 = { ...cropRect.value };
+      const MIN = 8;
+      const onMove = (ev) => {
+        const dx = (ev.clientX - sx) / box.width * 100, dy = (ev.clientY - sy) / box.height * 100;
+        let { x, y, w, h } = r0;
+        if (dir.includes('e')) w = Math.min(100 - x, Math.max(MIN, r0.w + dx));
+        if (dir.includes('s')) h = Math.min(100 - y, Math.max(MIN, r0.h + dy));
+        if (dir.includes('w')) { const nx = Math.min(r0.x + r0.w - MIN, Math.max(0, r0.x + dx)); w = r0.w + (r0.x - nx); x = nx; }
+        if (dir.includes('n')) { const ny = Math.min(r0.y + r0.h - MIN, Math.max(0, r0.y + dy)); h = r0.h + (r0.y - ny); y = ny; }
+        if (cropAspect.value) { // 比例锁定: 以宽为主导重算高
+          const [aw, ah] = cropAspect.value.split(':').map(Number);
+          h = Math.min(100 - y, w * ah / aw);
+          w = h * aw / ah;
+        }
+        cropRect.value = { x, y, w, h };
+      };
+      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+      window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    }
+    function applyCrop() { cropApplied.value = true; cropMode.value = false; showToast('裁切已应用', 'success'); }
+    function exitCrop(restore = true) { cropMode.value = false; if (restore) cropApplied.value = false; }
+    // ===== V20: Trim 吸附 + 时间码气泡 =====
+    const trimTip = ref(null);
+    function edgeCandidates(type, excludeId) {
+      const cands = [0, tlDuration.value]; // V26: 秒制边缘 (0 与 时间轴尾)
+      allClips(type).forEach(c => { if (c.id !== excludeId) cands.push(c.start, c.start + c.dur); }); // V25: 跨全部同类轨道
+      return cands;
+    }
+    function snapValue(v, cands) {
+      for (const c of cands) { if (Math.abs(v - c) <= SNAP_SEC.value) return c; }
+      return v;
+    }
+    // ===== V20: 撤销栈 =====
+    const undoStack = ref([]);
+    function snapshotState() {
+      undoStack.value.push(JSON.stringify({   // V25: 整轨快照 (含轨道结构/锁定/名称)
+        vt: videoTracks.value, at: audioTracks.value,
+        sel: selectedLoc.value
+      }));
+      if (undoStack.value.length > 30) undoStack.value.shift();
+    }
+    function undoEdit() {
+      const snap = undoStack.value.pop();
+      if (!snap) { showToast('没有可撤销的操作', 'info'); return; }
+      const s = JSON.parse(snap);
+      videoTracks.value = s.vt; audioTracks.value = s.at;
+      selectedLoc.value = s.sel;
+    }
+    function pushUndo() { snapshotState(); }
+    // ===== V20: 模式标签 / 键盘快捷键 =====
+    const editLabel = computed(() =>
+      currentAsset.value.type === 'IMAGE' ? '修图' :
+      currentAsset.value.type === '3D' ? '编辑' : '剪辑');
+    function onKeydown(e) {
+      const t = e.target;
+      // V32: Cmd/Ctrl+K 命令面板 — 全局生效 (输入框内也可唤起, 再按关闭)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        if (currentView.value === 'library' && !currentAsset.value) { libCmdMode.value ? (libSearch.value = '') : enterLibCmd(); }
+        else paletteOpen.value ? closePalette() : openPalette();
+        e.preventDefault(); return;
+      }
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      // V32: 非编辑态 — 空格播放 + Escape 分层关闭 (弹层 → 裁切 → 队列 → 查看器)
+      if (!isEditing.value) {
+        const type0 = currentAsset.value?.type;
+        const isMedia0 = type0 === 'VIDEO' || type0 === 'AUDIO';
+        if (e.code === 'Space' && isMedia0 && !isTransitioning.value) { togglePlay(); e.preventDefault(); return; }
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e' && currentAsset.value) { toggleEditMode(true); e.preventDefault(); return; }
+        if (e.key === 'Escape' && currentAsset.value) {
+          if (camMenuOpen.value || matMenuOpen.value) { camMenuOpen.value = false; matMenuOpen.value = false; }
+          else if (trackMenu.value) trackMenu.value = null;
+          else if (cropMode.value) { cropMode.value = false; cropApplied.value = false; }
+          else if (showQueue.value) showQueue.value = false;
+          else closeViewer();
+          e.preventDefault();
+        }
+        return;
+      }
+      const type = currentAsset.value.type;
+      const isMedia = type === 'VIDEO' || type === 'AUDIO';
+      if (e.key === 'Escape') {
+        // V32: 分层 — 轨道菜单/3D 弹层 → 裁切模式 → 队列 → 退出编辑
+        if (trackMenu.value) trackMenu.value = null;
+        else if (camMenuOpen.value || matMenuOpen.value) { camMenuOpen.value = false; matMenuOpen.value = false; }
+        else if (cropMode.value) { cropMode.value = false; cropApplied.value = false; }
+        else if (showQueue.value) showQueue.value = false;
+        else toggleEditMode(false);
+        e.preventDefault();
+      }
+      else if (isMedia && e.code === 'Space') { togglePlay(); e.preventDefault(); }
+      else if (isMedia && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const step = (e.shiftKey ? 1 : 1 / 24) * (e.key === 'ArrowLeft' ? -1 : 1);
+        seekToTime(phTime.value + step); // V26: 统一经 seekToTime, 播放头与媒体必然同步
+        e.preventDefault();
+      }
+      else if (isMedia && (e.key === 'Delete' || e.key === 'Backspace')) {
+        if (selectedLoc.value) deleteClip(); // deleteClip 内部已入撤销栈
+        e.preventDefault();
+      }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        undoEdit(); e.preventDefault();
+      }
+      else if (!e.ctrlKey && !e.metaKey && isMedia && e.key.toLowerCase() === 's') {
+        splitClip(); e.preventDefault(); // V21: S = 刀片分割
+      }
+      else if (isMedia && e.key === 'Home') { seekHome(); e.preventDefault(); }      // V22: 跳到开头
+      else if (isMedia && e.key === 'End')  { seekEnd(); e.preventDefault(); }      // V22: 跳到结尾
+      else if (!e.ctrlKey && !e.metaKey && isMedia && e.key.toLowerCase() === 'n') {
+        jumpToEditPoint(1); e.preventDefault(); // V22: 下一个剪辑点
+      }
+    }
+    window.addEventListener('keydown', onKeydown);
+
+    // ===== V22: 走带控制 + 时间线缩放 + 检查器 =====
+    const snapOn = ref(true);   // 吸附开关 (走带条磁铁按钮)
+    const tlZoom = ref(100);    // 时间线缩放百分比 (50–300)
+
+    // === V23: 编辑器高度拖拽 (预览区 paddingBottom 与编辑面板 height 双绑定, 20vh ~ 70vh) ===
+    const editorHeightPct = ref(40);
+    const editorDragging = ref(false);
+    const startEditorResize = (e) => {
+      editorDragging.value = true;                 // 拖拽中禁用过渡, 保证 1:1 跟随
+      const startY = e.clientY;
+      const startPct = editorHeightPct.value;
+      const vh = window.innerHeight || 800;
+      const onMove = (ev) => {
+        const dy = ev.clientY - startY;            // 向上拖动 (dy<0) → 增大编辑器空间
+        editorHeightPct.value = Math.min(70, Math.max(20, startPct - (dy / vh) * 100));
+      };
+      const onUp = () => {
+        editorDragging.value = false;              // 松手恢复过渡, 吸附感由 CSS 过渡承担
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+
+    // === V23: 检查器收起 / 展开 + 窄屏自动收起 (<1100px) ===
+    const inspectorCollapsed = ref(false);
+    const narrowMQ = window.matchMedia('(max-width: 1100px)');
+    if (narrowMQ.matches) inspectorCollapsed.value = true;
+    narrowMQ.addEventListener('change', (ev) => { if (ev.matches) inspectorCollapsed.value = true; });
+
+    // === V23: 侧边栏技术元数据 — 按激活版本 URL 取 Schema 行 (同类型不同格式随版本切换联动) ===
+    const viewerMetaRows = computed(() => metaRowsOf(currentAsset.value, true));
+    const activeVerInfo = computed(() => {
+      const v = versionOf(currentAsset.value, true);
+      return v ? v.tag + ' · ' + v.format : '—';
+    });
+    // === V26: 唯一寻址入口 — 所有 seek (走带/键盘/刻度/拖拽/吸附预览) 必经此函数 ===
+    let seekPending = false; // V26: seek 在途标记 — 屏蔽 seek 完成前旧位置回传的 timeupdate, 防播放头漂移
+    function seekToTime(t) {
+      phTime.value = Math.min(Math.max(0, t), tlDuration.value);
+      const m = mediaEl.value;
+      if (m && isFinite(m.duration) && m.duration > 0) {
+        // 结尾钳制到媒体最后一帧, 避免 loop 属性触发 ended 回卷; 播放头可越过媒体尾 (时间轴视角)
+        seekPending = true;
+        const done = () => { seekPending = false; m.removeEventListener('seeked', done); };
+        m.addEventListener('seeked', done, { once: true });
+        setTimeout(() => { seekPending = false; m.removeEventListener('seeked', done); }, 600); // seeked 未触发兜底
+        m.currentTime = Math.min(phTime.value, Math.max(0, m.duration - 1 / FPS));
+      }
+    }
+    const seekHome = () => seekToTime(0);
+    const seekEnd  = () => seekToTime(Math.max(0, tlDuration.value - (isAudioTC.value ? 0.01 : 1 / FPS)));
+    // 走带: 相对步进 (秒)
+    function stepBy(sec) { seekToTime(phTime.value + sec); }
+    // 剪辑点跳转 (DaVinci N 键): 跳到下一个/上一个片段边缘 (秒制边缘)
+    function jumpToEditPoint(dir) {
+      const pts = [...allClips('video'), ...allClips('audio')]   // V25: 跨全部轨道
+        .flatMap(c => [c.start, c.start + c.dur]).sort((a, b) => a - b);
+      const cur = phTime.value;
+      const next = dir > 0 ? pts.find(p => p > cur + 0.04) : [...pts].reverse().find(p => p < cur - 0.04);
+      if (next != null) seekToTime(next);
+      else showToast(dir > 0 ? '已到最后一个剪辑点' : '已到第一个剪辑点', 'info');
+    }
+    // 检查器: 当前选中片段 (无选中时为 null → 空状态); V25: 轨道寻址
+    const selectedClip = computed(() => {
+      const loc = selectedLoc.value;
+      if (!loc) return null;
+      const t = findTrack(loc.type, loc.trackId);
+      const clip = t ? t.clips.find(c => c.id === loc.clipId) : null;
+      return clip ? { clip, type: loc.type, trackId: loc.trackId, trackName: t.name } : null;
+    });
+    const clipInTC    = computed(() => isAudioTC.value ? '00:00.00' : '00:00:00:00'); // 源片段完整引用, 入点为 0
+    const clipOutTC   = computed(() => selectedClip.value ? fmtTC(selectedClip.value.clip.start + selectedClip.value.clip.dur) : tcPlaceholder.value);
+    const clipDurTC   = computed(() => selectedClip.value ? fmtTC(selectedClip.value.clip.dur) : tcPlaceholder.value);
+    const clipStartTC = computed(() => selectedClip.value ? fmtTC(selectedClip.value.clip.start) : tcPlaceholder.value);
+
+    // ===== V21: 向 DaVinci 编辑页靠近 =====
+    const FPS = 24; // 模拟项目帧率 (GIF 底部 24FPS 指示)
+    const mediaDuration = ref(0);
+
+    // ===== V26: 统一时间模型 (秒为唯一单位, 一套换算驱动 播放头/刻度/片段/检查器/传送带) =====
+    const ppsPx = computed(() => Math.round(tlZoom.value * 0.8)); // 像素/秒 (40–240, 缩放滑杆即物理缩放)
+    const timeToX = (t) => t * ppsPx.value;                       // 秒 → 时间轴像素 (唯一换算入口)
+    const parseDur = (s) => {                                     // "3:26" → 206 秒; 无则 0
+      if (s == null) return 0;
+      const parts = String(s).split(':').map(Number);
+      if (!parts.length || parts.some(isNaN)) return 0;
+      return parts.reduce((acc, p) => acc * 60 + p, 0);
+    };
+    const fmtClock = (sec) => {                                   // 372.5 → "6:12" (侧栏时长回写用)
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const s = Math.floor(sec % 60), m = Math.floor(sec / 60) % 60, h = Math.floor(sec / 3600);
+      return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
+    };
+    const round2 = (v) => Math.round(v * 100) / 100;
+    // 时间轴总长 = 内容真实结束点 (全部片段 / 媒体实际时长), 保底 10s — 全部面板共享这个时间源
+    const tlDuration = computed(() => {
+      let d = 10;
+      if (mediaDuration.value > d) d = mediaDuration.value;
+      for (const t of [...videoTracks.value, ...audioTracks.value])
+        for (const c of t.clips)
+          if (c.start + c.dur > d) d = c.start + c.dur;
+      return d;
+    });
+    const tlWidth = computed(() => Math.max(640, Math.ceil(tlDuration.value * ppsPx.value)));
+    const phX = computed(() => timeToX(phTime.value)); // 播放头像素位置
+    // 刻度: 候选步长取 "间距≥80px 且 全轨≤40个" 的均匀间隔
+    const RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
+    const rulerStep = computed(() => {
+      const D = tlDuration.value, pps = ppsPx.value;
+      let step = RULER_STEPS.find(s => s * pps >= 80) || 3600;
+      while (D / step > 40) {
+        const i = RULER_STEPS.indexOf(step);
+        step = i >= 0 && i < RULER_STEPS.length - 1 ? RULER_STEPS[i + 1] : step * 2;
+      }
+      return step;
+    });
+    const rulerTicks = computed(() => {
+      const D = tlDuration.value, st = rulerStep.value, pps = ppsPx.value;
+      const ticks = [];
+      for (let t = 0; t <= D + 0.001 && ticks.length < 48; t += st) ticks.push({ x: Math.round(t * pps), label: fmtTC(t) });
+      return ticks;
+    });
+    // 垂直网格: 主刻度线 + 1/5 次刻度线, 随缩放自适应 (替代 V22 固定 40px 网格)
+    const gridBg = computed(() =>
+      'linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),' +
+      'linear-gradient(to right, rgba(255,255,255,0.09) 1px, transparent 1px)');
+    const gridBgSize = computed(() => `${(rulerStep.value * ppsPx.value) / 5}px 100%, ${rulerStep.value * ppsPx.value}px 100%`);
+    const minorGridBg = computed(() => 'linear-gradient(to right, rgba(255,255,255,0.07) 1px, transparent 1px)');
+    const minorGridSize = computed(() => `${(rulerStep.value * ppsPx.value) / 5}px 100%`);
+
+    // === V26: 分类型时间码 — 视频 HH:MM:SS:FF (24fps) / 音频 MM:SS.CS (音频无帧) ===
+    const isAudioTC = computed(() => currentAsset.value?.type === 'AUDIO');
+    function fmtTCframes(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const p = n => String(n).padStart(2, '0');
+      const f = Math.floor((sec % 1) * FPS);
+      const s = Math.floor(sec) % 60, m = Math.floor(sec / 60) % 60, h = Math.floor(sec / 3600);
+      return `${p(h)}:${p(m)}:${p(s)}:${p(f)}`;
+    }
+    function fmtTCms(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const p = n => String(n).padStart(2, '0');
+      const cs = Math.floor((sec % 1) * 100);
+      const s = Math.floor(sec) % 60, m = Math.floor(sec / 60) % 60;
+      return `${p(m)}:${p(s)}.${p(cs)}`;
+    }
+    function fmtTC(sec) { return isAudioTC.value ? fmtTCms(sec) : fmtTCframes(sec); }
+    const tcPlaceholder = computed(() => isAudioTC.value ? '--:--.--' : '--:--:--:--');
+    const playheadTC = computed(() => fmtTC(phTime.value));      // 走带大时间码
+    const totalTC = computed(() => fmtTC(tlDuration.value));     // 走带总时长 (与时间轴同源)
+    const projectRateBadge = computed(() => {                    // 音频项目不显示帧率
+      if (currentAsset.value?.type !== 'AUDIO') return '24 FPS';
+      const v = versionOf(currentAsset.value, true);
+      return v?.meta?.sampleRate || '音频项目';
+    });
+    // 迷你进度条 / 音频封面波形: 全部按 phTime / tlDuration 比例 (与主时间轴同源)
+    const miniClipStyle = (c) => {
+      const D = tlDuration.value || 1;
+      return { left: (c.start / D) * 100 + '%', width: (c.dur / D) * 100 + '%' };
+    };
+    const miniPhPct = computed(() => tlDuration.value ? (phTime.value / tlDuration.value) * 100 : 0);
+    const audioCardPhPct = computed(() => mediaDuration.value ? Math.min(100, (phTime.value / mediaDuration.value) * 100) : 0);
+    // ===== V25: 轨道操作集 (DaVinci 轨道头语义: 锁定禁一切编辑 / 显隐 / 增删 / 重命名 / 排序) =====
+    function toggleTrackLock(type, trackId) {
+      const t = findTrack(type, trackId);
+      if (!t) return;
+      t.locked = !t.locked;
+      if (t.locked && selectedLoc.value?.type === type && selectedLoc.value.trackId === trackId) {
+        selectedLoc.value = null; // DaVinci 行为: 锁定轨道同时取消其片段选中
+      }
+      trackMenu.value = null;
+      showToast(`${t.name} 轨道已${t.locked ? '锁定' : '解锁'}`, 'info');
+    }
+    function toggleTrackVis(type, trackId) {
+      const t = findTrack(type, trackId);
+      if (!t) return;
+      if (type === 'video') t.hidden = !t.hidden; else t.muted = !t.muted;
+      trackMenu.value = null;
+    }
+    function addTrack(type) {
+      const list = tracksOf(type).value;
+      if (list.length >= MAX_TRACKS) { showToast(`最多 ${MAX_TRACKS} 条${type === 'video' ? '视频' : '音频'}轨道`, 'info'); return; }
+      snapshotState(); // 入撤销栈
+      const t = { id: nextTrackId++, name: (type === 'video' ? 'V' : 'A') + (list.length + 1), locked: false, hidden: false, muted: false, clips: [] };
+      list.push(t);
+      showToast(`已添加 ${t.name} 轨道`, 'success');
+    }
+    function deleteTrack(type, trackId) {
+      const list = tracksOf(type).value;
+      if (list.length <= 1) { showToast('至少保留一条轨道', 'info'); return; } // 保底一条
+      const i = list.findIndex(t => t.id === trackId);
+      if (i < 0) return;
+      snapshotState();
+      const [t] = list.splice(i, 1);
+      if (selectedLoc.value?.type === type && selectedLoc.value.trackId === trackId) selectedLoc.value = null;
+      renumberTracks(type); // 编号自动重排
+      trackMenu.value = null;
+      showToast(`已删除 ${t.name} 轨道`);
+    }
+    function openTrackMenu(e, type, trackId) {
+      e.preventDefault();
+      // 菜单位置钳制在视口内
+      trackMenu.value = { x: Math.min(e.clientX, window.innerWidth - 180), y: Math.min(e.clientY, window.innerHeight - 190), type, trackId };
+    }
+    function startRenameTrack(type, trackId) {
+      const t = findTrack(type, trackId);
+      if (!t) return;
+      editingTrack.value = { type, trackId, draft: t.name };
+      trackMenu.value = null;
+      nextTick(() => { const inp = document.querySelector('.rename-input'); if (inp) { inp.focus(); inp.select(); } });
+    }
+    function commitRenameTrack() {
+      const ed = editingTrack.value;
+      if (!ed) return;
+      const t = findTrack(ed.type, ed.trackId);
+      const name = (ed.draft || '').trim().slice(0, 6);
+      if (t && name) t.name = name;
+      editingTrack.value = null;
+    }
+    function cancelRenameTrack() { editingTrack.value = null; }
+    // 轨道头垂直拖拽排序 (同类型内, 越过相邻车道中线即交换, 自动重编号)
+    function startTrackReorder(e, type, trackId) {
+      trackDrag = { type, trackId };
+      window.addEventListener('mousemove', onTrackReorderMove);
+      window.addEventListener('mouseup', endTrackReorder, { once: true });
+    }
+    function onTrackReorderMove(e) {
+      if (!trackDrag) return;
+      const list = tracksOf(trackDrag.type).value;
+      const i = list.findIndex(t => t.id === trackDrag.trackId);
+      if (i < 0) return;
+      const heads = [...document.querySelectorAll('.track-head-col .track-head')]
+        .filter(h => h.dataset.trackType === trackDrag.type);
+      heads.forEach((h, hi) => {
+        if (hi >= list.length) return;
+        const r = h.getBoundingClientRect();
+        if (e.clientY >= r.top && e.clientY <= r.bottom && hi !== i) {
+          const [t] = list.splice(i, 1);
+          list.splice(hi, 0, t);
+          renumberTracks(trackDrag.type);
+        }
+      });
+    }
+    function endTrackReorder() {
+      if (trackDrag) { suppressRowDeselect = true; suppressSeekAfterDrag = true; }
+      trackDrag = null;
+    }
+    // 视频片段真实胶片缩略图: seeked 事件链逐帧抽帧, 跨域污染自动降级 CSS 胶片纹
+    const videoStripUrl = ref('');
+    function captureThumbnails() {
+      const v = mediaEl.value;
+      if (!v || v.tagName !== 'VIDEO' || v.readyState < 2 || !v.duration || !isFinite(v.duration)) return;
+      const N = 8, tw = 72, th = 40;
+      const c = document.createElement('canvas'); c.width = N * tw; c.height = th;
+      const ctx = c.getContext('2d');
+      const restoreTime = v.currentTime, wasPaused = v.paused;
+      let i = 0;
+      const draw = () => {
+        try {
+          ctx.drawImage(v, i * tw, 0, tw, th);
+          i++;
+          if (i < N) { v.currentTime = (i / N) * v.duration; return; }
+          v.removeEventListener('seeked', draw);
+          videoStripUrl.value = c.toDataURL('image/jpeg', 0.6);
+        } catch (err) {
+          v.removeEventListener('seeked', draw);
+          videoStripUrl.value = ''; // 跨域 → 模板走 filmstrip-fallback
+        }
+        v.currentTime = restoreTime;
+        if (!wasPaused) v.play().catch(() => {});
+      };
+      v.pause();
+      v.addEventListener('seeked', draw);
+      v.currentTime = 0;
+    }
+    // ===== V29: 波形引擎 — 高分辨率 min/max 峰值 (2048 桶), 真实解码优先, 种子合成兜底 =====
+    // fetch+decodeAudioData 需音源允许 CORS (viper.mp3 所在 mdn.github.io 允许 *);
+    // 不允许时退化为按 URL 哈希播种的段落式能量包络 — 形似真实乐曲 (前奏/推进/副歌/尾奏), 不再是正弦假柱
+    const WAVE_BUCKETS = 2048;
+    const waveCache = new Map(); // url -> { min, max, real } | 'pending'
+    const wavePeaks = ref(null); // 当前激活版本 { min:Float32Array, max:Float32Array, real, url }
+
+    const hashStr = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const mulberry32 = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+
+    function synthPeaks(url) {
+      const rnd = mulberry32(hashStr(url));
+      const N = WAVE_BUCKETS;
+      const min = new Float32Array(N), max = new Float32Array(N);
+      const weights = [0.32, 0.55, 0.72, 1.0, 0.78, 1.0, 0.5, 0.28]; // 段落能量, 副歌最高
+      let pos = 0;
+      const spans = weights.map(w => ({ w, len: Math.max(8, Math.round(N * (w >= 1 ? 0.17 : 0.115))) }));
+      spans.forEach(s => { s.pos = pos; pos += s.len; });
+      spans.push({ w: 0.22, len: N - pos, pos });
+      for (const s of spans) {
+        for (let i = 0; i < s.len; i++) {
+          const env = Math.sin((i / s.len) * Math.PI);                    // 段内平滑起落
+          const beat = 0.72 + 0.28 * Math.abs(Math.sin(i * 0.55 + rnd() * 0.4)); // 节拍脉动
+          const amp = Math.min(1, s.w * env * beat * (0.75 + rnd() * 0.35));
+          const idx = s.pos + i;
+          max[idx] = amp;
+          min[idx] = -amp * (0.55 + rnd() * 0.45);                        // 上下不对称更像真实采样
+        }
+      }
+      return { min, max, real: false, url };
+    }
+
+    async function computeWaveformReal(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('http ' + res.status);
+      const buf = await res.arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ac = new AC();
+      try {
+        const audio = await ac.decodeAudioData(buf);
+        const N = WAVE_BUCKETS;
+        const min = new Float32Array(N), max = new Float32Array(N);
+        const chans = []; for (let c = 0; c < audio.numberOfChannels; c++) chans.push(audio.getChannelData(c));
+        const step = audio.length / N;
+        for (let i = 0; i < N; i++) {
+          let lo = 0, hi = 0;
+          const start = Math.floor(i * step), end = Math.min(audio.length, Math.max(start + 1, Math.floor((i + 1) * step)));
+          for (let c = 0; c < chans.length; c++) {
+            const d = chans[c];
+            for (let j = start; j < end; j += 24) { const v = d[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
+          }
+          min[i] = lo; max[i] = hi;
+        }
+        return { min, max, real: true, url };
+      } finally { ac.close(); }
+    }
+
+    async function ensureWaveform(url) {
+      if (!url || (wavePeaks.value && wavePeaks.value.url === url)) return;
+      let cached = waveCache.get(url);
+      if (!cached) {
+        waveCache.set(url, 'pending');
+        try { cached = await computeWaveformReal(url); }
+        catch (e) { cached = synthPeaks(url); } // 音源不允许 CORS / 解码失败 → 合成兜底
+        waveCache.set(url, cached);
+      } else {
+        while (cached === 'pending') { await new Promise(r => setTimeout(r, 120)); cached = waveCache.get(url); } // 在途解码, 等待复用
+      }
+      if (cached && cached !== 'pending' && currentAsset.value && currentAsset.value.activeUrl === url) {
+        wavePeaks.value = cached; // 版本已切走则丢弃
+      }
+    }
+
+    let currentLoadId = 0; // 竞态令牌: deepseek 的正确设计, 予以保留
+
+    const assets = ref(MOCK_ASSETS);
+
+    // ===== V32: 资产管理 — 搜索 / 类型·标签筛选 / 收藏 (收藏持久化 localStorage) =====
+    const LIB_TYPE_FILTERS = [
+      { v: 'ALL', label: '全部' }, { v: '3D', label: '3D' }, { v: 'VIDEO', label: '视频' },
+      { v: 'AUDIO', label: '音频' }, { v: 'IMAGE', label: '图片' },
+    ];
+    const libSearch = ref('');
+    const libTypeFilter = ref('ALL');
+    const libTagFilter = ref(null);
+    const libFavOnly = ref(false);
+    // V33: 搜索/命令双模式 + 标签收纳 + 分页
+    const libCmdIdx = ref(0);
+    const libTagsExpanded = ref(false);
+    const libPage = ref(1);
+    const libPageSize = ref(12);
+    const libCmdMode = computed(() => libSearch.value.startsWith('>'));
+    const libCmdFlat = computed(() => {
+      const q = libSearch.value.slice(1).trim().toLowerCase();
+      return paletteFlat.value.filter(c => c.id !== 'go-lib')
+        .filter(c => !q || (c.group + c.name + (c.hint || '')).toLowerCase().includes(q));
+    });
+    const libCmdGroups = computed(() => {
+      const groups = [];
+      for (const c of libCmdFlat.value) {
+        let g = groups.find(g => g.name === c.group);
+        if (!g) { g = { name: c.group, items: [] }; groups.push(g); }
+        g.items.push(c);
+      }
+      return groups;
+    });
+    const libPageCount = computed(() => Math.max(1, Math.ceil(filteredAssets.value.length / libPageSize.value)));
+    const pagedAssets = computed(() => {
+      const s0 = (libPage.value - 1) * libPageSize.value;
+      return filteredAssets.value.slice(s0, s0 + libPageSize.value);
+    });
+    watch([libSearch, libTypeFilter, libTagFilter, libFavOnly, libPageSize], () => { libCmdIdx.value = 0; libPage.value = 1; });
+    const libSearchKeydown = (e) => {
+      if (!libCmdMode.value) { if (e.key === 'Escape') libSearch.value = ''; return; }
+      const flat = libCmdFlat.value;
+      if (e.key === 'ArrowDown') { libCmdIdx.value = Math.min(flat.length - 1, libCmdIdx.value + 1); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { libCmdIdx.value = Math.max(0, libCmdIdx.value - 1); e.preventDefault(); }
+      else if (e.key === 'Enter') { const c = flat[libCmdIdx.value]; if (c && !c.disabled) runLibCmd(c); e.preventDefault(); }
+      else if (e.key === 'Escape') { libSearch.value = ''; e.preventDefault(); }
+    };
+    const runLibCmd = (c) => { libSearch.value = ''; runCommand(c); };
+    const enterLibCmd = () => { libSearch.value = '> '; libCmdIdx.value = 0; nextTick(() => { const el = document.getElementById('lib-search'); if (el) el.focus(); }); };
+    const favorites = ref(JSON.parse(localStorage.getItem('ah_favs') || '[]'));
+    const persistFavs = () => localStorage.setItem('ah_favs', JSON.stringify(favorites.value));
+    const isFav = (uuid) => favorites.value.includes(uuid);
+    const toggleFav = (uuid) => {
+      const i = favorites.value.indexOf(uuid);
+      if (i >= 0) favorites.value.splice(i, 1); else favorites.value.push(uuid);
+      favorites.value = [...favorites.value]; persistFavs();
+      nextTick(() => lucide.createIcons()); // V33: v-if 插入的 data-lucide 图标需补转换
+      showToast(i >= 0 ? '已取消收藏' : '已加入收藏', 'info');
+    };
+    const allTags = computed(() => [...new Set(assets.value.flatMap(a => a.tags || []))]);
+    const filteredAssets = computed(() => {
+      const q = libSearch.value.trim().toLowerCase();
+      return assets.value.filter(a => {
+        if (libTypeFilter.value !== 'ALL' && a.type !== libTypeFilter.value) return false;
+        if (libTagFilter.value && !(a.tags || []).includes(libTagFilter.value)) return false;
+        if (libFavOnly.value && !isFav(a.uuid)) return false;
+        if (q) {
+          const hay = [a.name, a.prompt, a.format, a.type, (a.tags || []).join(' ')].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    });
+
+    // === V27: Toast 生命周期 — 类型化图标 / 相同消息去重刷新 / 进度条 / 悬停暂停 / 上限 4 条 ===
+    const TOAST_LIFE = 3500;
+    const TOAST_META = {
+      success: ['check-circle', 'text-primary', '#3b82f6'],
+      info:    ['info', 'text-zinc-400', '#71717a'],
+      warn:    ['alert-triangle', 'text-amber-400', '#fbbf24'],
+      error:   ['x-circle', 'text-red-400', '#f43f5e'],
+    };
+    const dismissToast = (id) => { toasts.value = toasts.value.filter(t => t.id !== id); };
+    const showToast = (msg, type = 'info') => {
+      const [icon, color, bar] = TOAST_META[type] || TOAST_META.info;
+      const dup = toasts.value.find(t => t.msg === msg && t.type === type);
+      if (dup) { dup.born = Date.now(); return dup.id; } // 去重: 刷新生命周期而非堆叠 (GIF 残留 20s 的根因)
+      const id = Date.now() + Math.random();
+      toasts.value.push({ id, msg, type, icon, color, bar, born: Date.now(), hold: false });
+      if (toasts.value.length > 4) toasts.value.shift();
+      nextTick(() => lucide.createIcons()); // 动态绑定的 data-lucide 需补转换
+      return id;
+    };
+    setInterval(() => { // 生命周期守护: hold (悬停) 中不下线
+      const now = Date.now();
+      toasts.value = toasts.value.filter(t => t.hold || now - t.born < TOAST_LIFE + 500);
+    }, 500);
+
+    const getTypeIcon = (type) => type === '3D' ? 'box' : (type === 'VIDEO' ? 'play-circle' : (type === 'IMAGE' ? 'image' : 'music'));
+
+    // V26: 基线片段时长取自激活版本元数据 (VIDEO 缺省 10s / AUDIO 缺省 3:26), 保证多面板同源
+    const baselineDurOf = (asset) => {
+      const v = versionOf(asset, true);
+      return parseDur(v?.meta?.duration) || (asset.type === 'AUDIO' ? 206 : 10);
+    };
+    const openViewer = (asset) => {
+      isEditing.value = false;
+      mediaError.value = false; // V27: 新资产重置错误态
+      armTransition();
+      isPlaying.value = false;
+      phTime.value = 0;
+      // V25: 打开资产时重置轨道编辑状态 (回归基线: 单 V1 + 单 A1)
+      // V26: 两轨片段起点均为 0 (默认对齐), 时长按版本元数据 — 视频块/音频块宽度∝真实时长
+      const isV = asset.type === 'VIDEO';
+      const vDur = baselineDurOf(asset);
+      videoTracks.value = [{ id: 1, name: 'V1', locked: false, hidden: false, clips: [{ id: 1, start: 0, dur: vDur }] }];
+      // V32: 音频基线随视频时长 (不再硬编码 206s), 导轨总长 = 内容真实结束点, 杜绝空轨拉伸
+      audioTracks.value = [{ id: 1, name: 'A1', locked: false, muted: false, clips: [{ id: 1, start: 0, dur: vDur, gain: 1, fadeIn: 0, fadeOut: 0 }] }]; // V29: 音频剪辑参数基线
+      nextTrackId = 2; nextClipId = 2;
+      selectedLoc.value = null;
+      trackMenu.value = null; editingTrack.value = null;
+      undoStack.value = []; // V20: 打开资产清空撤销栈
+      trimTip.value = null;
+      showQueue.value = false; // 切换资产时收起渲染队列面板
+      resetImgAdjust(); // V20: 图片调整回归基线
+      matMetalness.value = 0.5; matRoughness.value = 0.5; // 3D 材质回归基线
+      modelInfo.value = null; camMenuOpen.value = false; matMenuOpen.value = false; // V29: 3D 弹层/机位回归
+      cropMode.value = false; cropApplied.value = false; cropAspect.value = null; // V29: 裁切回归基线
+      cropRect.value = { x: 10, y: 10, w: 80, h: 80 };
+      // V21: 缩略图 / 波形 / 时长 回归基线 (锁定/显隐已随轨道结构重置)
+      videoStripUrl.value = '';
+      wavePeaks.value = null; // V29: 波形回归基线 (按新版本 URL 重新解码)
+      if (asset.type === 'VIDEO') wavePeaks.value = synthPeaks('bgm-' + asset.uuid); // VIDEO 的 BGM 轨与源媒体无关, 给种子波形
+      mediaDuration.value = 0;
+      snapOn.value = true; tlZoom.value = 100; // V22: 吸附 / 缩放回归基线
+      editorHeightPct.value = 40; inspectorCollapsed.value = narrowMQ.matches; // V23: 编辑器高度 / 检查器状态回归基线
+      currentAsset.value = asset;
+      nextTick(() => gsap.fromTo('#viewer-root', // V27: 查看器入场 — 淡入 + 微上浮
+        { opacity: 0, y: 16, scale: 0.985 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'power3.out', clearProps: 'all' }));
+      if (asset.type === '3D') {
+        const loadId = ++currentLoadId;
+        nextTick(() => { initThree(); load3DModel(asset.activeUrl, loadId); });
+      }
+      // 非 3D: 由媒体元素 load / loadeddata / canplay 事件收口
+    };
+
+    const closeViewer = () => {
+      currentLoadId++;            // 使所有在途加载回调失效
+      clearTransition();
+      gsap.to('#viewer-root', {   // V27: 出场动画后卸载, 避免硬切
+        opacity: 0, y: 12, scale: 0.985, duration: 0.22, ease: 'power2.in',
+        onComplete: () => {
+          isEditing.value = false;
+          selectedLoc.value = null;   // V25
+          trackMenu.value = null; editingTrack.value = null;
+          mediaError.value = false;
+          currentAsset.value = null;  // 查看器卸载, watch 中挂起渲染并释放模型
+        }
+      });
+    };
+
+    // === 版本切换 (事件驱动, 无 setTimeout) ===
+    const switchVersion = async (tag) => {
+      const asset = currentAsset.value;
+      if (!asset || asset.current_version === tag) return;
+      const target = asset.versions.find(v => v.tag === tag);
+      if (!target) return;
+
+      asset.current_version = tag;
+      asset.activeUrl = target.url;
+      mediaError.value = false; // V27: 版本切换重置错误态
+
+      await nextTick();
+      const mx = mediaEl.value; // V27: 版本切换媒体交叉淡入
+      if (mx) gsap.fromTo(mx, { opacity: 0 }, { opacity: 1, duration: 0.45, ease: 'power2.out', clearProps: 'opacity' });
+      lucide.createIcons(); // 刷新 check 图标
+      showToast(`已切换至版本 ${tag}`);
+      armTransition();
+
+      if (asset.type === '3D') {
+        const loadId = ++currentLoadId;
+        load3DModel(target.url, loadId);
+      }
+      // 其余类型: src 变更触发媒体事件, onMediaReady 统一收幕布
+    };
+
+    const onMediaReady = () => {
+      clearTransition();
+      // V21: 记录时长驱动帧级时间码, 并异步准备真实缩略图/波形
+      const m = mediaEl.value;
+      if (m && m.duration && isFinite(m.duration)) {
+        mediaDuration.value = m.duration;
+        healDurations(m.duration); // V26: 真实时长回写模型 + 侧栏, 三面板自洽
+      }
+      if (currentAsset.value?.type === 'VIDEO') captureThumbnails();
+      if (currentAsset.value?.type === 'AUDIO') ensureWaveform(m.currentSrc); // V29: 真实波形引擎
+    };
+    // V26: 真实媒体时长 → 主片段时长 + 侧栏 duration 行回写 (时间轴/检查器/侧栏 同源自洽)
+    function healDurations(real) {
+      const asset = currentAsset.value;
+      if (!asset) return;
+      const v = versionOf(asset, true);
+      if (v?.meta && 'duration' in v.meta) v.meta.duration = fmtClock(real);
+      const tracks = asset.type === 'AUDIO' ? audioTracks.value : videoTracks.value;
+      const first = tracks[0];
+      if (first && first.clips.length === 1 && Math.abs(first.clips[0].dur - real) > 0.5) {
+        first.clips[0].dur = round2(real);
+      }
+    }
+    const onMediaError = () => {
+      clearTransition();
+      mediaError.value = true; // V27: 失败 → 错误面板 (重试 / 缩略图兜底)
+      showToast('资源加载失败，请检查版本 URL', 'error');
+    };
+
+    // === 播放器联动 (播放按钮 / 播放头 / 迷你进度条 三端同步) ===
+    const togglePlay = () => {
+      const m = mediaEl.value;
+      if (!m) return;
+      if (m.paused) m.play().catch(() => showToast('浏览器阻止了自动播放'));
+      else m.pause();
+    };
+
+    let tuRafPending = false; // V30: timeupdate rAF 合流 — 一帧最多一次播放头状态写入
+    const onTimeUpdate = () => {
+      const m = mediaEl.value;
+      if (!m || !m.duration || draggingPlayhead || seekPending || tuRafPending) return;
+      tuRafPending = true;
+      requestAnimationFrame(() => {
+        tuRafPending = false;
+        const mm = mediaEl.value;
+        if (mm && mm.duration) phTime.value = Math.min(mm.currentTime, tlDuration.value); // V26: 媒体回传 → 唯一播放头状态
+      });
+    };
+
+    const seekMedia = (pct) => { // 迷你进度条点击 (百分比 → 秒)
+      seekToTime((pct / 100) * tlDuration.value);
+    };
+
+    // V26: 事件坐标 → 秒 (像素制; getBoundingClientRect 天然包含横向滚动偏移)
+    const timeFromEvent = (e) => {
+      if (!timelineEl.value) return 0; // 拖拽中退出编辑模式的边界保护
+      const rect = timelineEl.value.getBoundingClientRect();
+      return Math.min(tlDuration.value, Math.max(0, (e.clientX - rect.left) / ppsPx.value));
+    };
+
+    let phDragRaf = false; // V30: rAF 节流 — 播放头拖拽一帧最多 seek 一次 (媒体 seek 是重操作)
+    const onDragMove = (e) => {
+      if (!draggingPlayhead) return;
+      lastPhEvt = e;
+      if (phDragRaf) return;
+      phDragRaf = true;
+      requestAnimationFrame(() => {
+        phDragRaf = false;
+        if (draggingPlayhead && lastPhEvt) seekToTime(timeFromEvent(lastPhEvt));
+      });
+    };
+
+    const startDrag = (e) => {
+      draggingPlayhead = true;
+      onDragMove(e);
+      window.addEventListener('mousemove', onDragMove);
+      window.addEventListener('mouseup', () => { draggingPlayhead = false; }, { once: true });
+    };
+
+    // V25: 车道纵向滚动 → 轨道头列同步位移 (保持逐行对齐)
+    const headsListEl = ref(null);
+    const laneScrollEl = ref(null);
+    function syncHeadsScroll() {
+      if (headsListEl.value && laneScrollEl.value) {
+        headsListEl.value.style.transform = `translateY(${-laneScrollEl.value.scrollTop}px)`;
+      }
+    }
+
+    const seekFromClick = (e) => {
+      if (suppressSeekAfterDrag) { suppressSeekAfterDrag = false; return; } // 拖拽 clip 后松手不 seek
+      if (e.target.closest('.cursor-col-resize') || e.target.closest('.clip-block') || e.target.closest('.track-toggle')) return;
+      seekToTime(timeFromEvent(e));
+    };
+
+    // === V19: 轨道块交互 (拖动/修剪全程联动预览 scrub, 吸附播放头) ===
+    const scrubTo = (sec) => { // V26: 预览直达秒
+      if (scrubRafPending) return; // rAF 节流: trim 拖动时预览实时跟随边缘帧
+      scrubRafPending = true;
+      requestAnimationFrame(() => { scrubRafPending = false; seekToTime(sec); });
+    };
+
+    const SNAP_SEC = computed(() => 8 / ppsPx.value); // V26: 吸附阈值 8px (换算为秒, 缩放无关手感)
+
+    const selectClip = (clip, type, trackId) => { selectedLoc.value = { type, trackId, clipId: clip.id }; }; // V25
+
+    const startClipDrag = (e, clip, type, trackId) => {
+      if (isTrackLocked(type, trackId)) { showToast('轨道已锁定，无法编辑', 'info'); return; } // V21/V25 锁定守卫
+      selectClip(clip, type, trackId);
+      draggingClipId.value = clip.id;
+      clipDrag = { mode: 'move', clip, type, trackId, startX: e.clientX, origStart: clip.start, origDur: clip.dur, moved: false };
+      snapshotState(); // V20: 拖动开始时快照，供撤销
+      window.addEventListener('mousemove', onClipDragMove);
+      window.addEventListener('mouseup', endClipDrag, { once: true });
+    };
+
+    const startClipTrim = (e, clip, type, trackId, side) => {
+      if (isTrackLocked(type, trackId)) { showToast('轨道已锁定，无法编辑', 'info'); return; } // V21/V25 锁定守卫
+      selectClip(clip, type, trackId);
+      draggingClipId.value = clip.id;
+      clipDrag = { mode: side === 'left' ? 'trim-l' : 'trim-r', clip, type, trackId, startX: e.clientX, origStart: clip.start, origDur: clip.dur, moved: false };
+      snapshotState();
+      window.addEventListener('mousemove', onClipDragMove);
+      window.addEventListener('mouseup', endClipDrag, { once: true });
+    };
+
+    let clipDragRaf = false; // V30: rAF 节流 — 一帧最多一次轨道块写入, 高频 mousemove 合流
+    const onClipDragMove = (e) => {
+      if (!clipDrag) return;
+      clipDrag.lastEvt = e;
+      if (clipDragRaf) return;
+      clipDragRaf = true;
+      requestAnimationFrame(() => {
+        clipDragRaf = false;
+        const ev = clipDrag && clipDrag.lastEvt;
+        if (ev) processClipDragMove(ev);
+      });
+    };
+
+    const processClipDragMove = (e) => {
+      if (!clipDrag || !timelineEl.value) return;
+      const dt = (e.clientX - clipDrag.startX) / ppsPx.value; // V26: 像素位移 → 秒
+      if (Math.abs(e.clientX - clipDrag.startX) > 2) clipDrag.moved = true;
+      const clip = clipDrag.clip;
+      // 吸附候选: 其他片段边缘 + 0 + 时间轴尾 + (可关) 播放头
+      const cands = edgeCandidates(clipDrag.type, clip.id).concat(snapOn.value ? [phTime.value] : []);
+      if (clipDrag.mode === 'move') {
+        let ns = snapValue(clipDrag.origStart + dt, cands);
+        ns = Math.min(tlDuration.value - clipDrag.origDur, Math.max(0, ns));
+        clip.start = round2(ns);
+        // V25: 垂直跨轨 — 光标下车道与片段当前车道不同则实时迁移 (目标轨锁定则拒绝)
+        const laneEl = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-lane-type]');
+        if (laneEl) {
+          const lt = laneEl.dataset.laneType, lid = Number(laneEl.dataset.laneId);
+          if (lt === clipDrag.type && lid !== clipDrag.trackId) {
+            const target = findTrack(lt, lid);
+            if (target && !target.locked) {
+              const src = findTrack(clipDrag.type, clipDrag.trackId);
+              const si = src ? src.clips.indexOf(clip) : -1;
+              if (si >= 0) src.clips.splice(si, 1);
+              target.clips.push(clip);
+              clipDrag.trackId = lid;
+              selectedLoc.value = { type: lt, trackId: lid, clipId: clip.id };
+            }
+          }
+        }
+        scrubTo(clip.start); // 预览跳到 clip 入点帧
+      } else if (clipDrag.mode === 'trim-r') {
+        const end = snapValue(clipDrag.origStart + clipDrag.origDur + dt, cands);
+        const nw = Math.min(tlDuration.value - clipDrag.origStart, Math.max(0.5, end - clipDrag.origStart)); // 最窄 0.5s
+        clip.dur = round2(nw);
+        scrubTo(clip.start + clip.dur); // 预览跳到出点帧
+        // V20: 时间码气泡 (秒 → 像素定位)
+        trimTip.value = { x: timeToX(clip.start + clip.dur), text: fmtTC(clip.start + clip.dur) };
+      } else { // trim-l
+        const maxStart = clipDrag.origStart + clipDrag.origDur - 0.5; // 最窄 0.5s
+        let ns = Math.min(maxStart, Math.max(0, snapValue(clipDrag.origStart + dt, cands)));
+        clip.start = round2(ns);
+        clip.dur = round2(clipDrag.origStart + clipDrag.origDur - ns);
+        scrubTo(clip.start);
+        trimTip.value = { x: timeToX(clip.start), text: fmtTC(clip.start) };
+      }
+    };
+
+    const endClipDrag = () => {
+      if (clipDrag && clipDrag.moved) { suppressRowDeselect = true; suppressSeekAfterDrag = true; }
+      else undoStack.value.pop(); // 未实际移动则丢弃起始快照
+      trimTip.value = null;
+      draggingClipId.value = null;
+      clipDrag = null;
+      window.removeEventListener('mousemove', onClipDragMove);
+    };
+
+    const onTrackRowClick = () => {
+      if (suppressRowDeselect) { suppressRowDeselect = false; return; }
+      selectedLoc.value = null;
+    };
+
+    const splitClip = () => {
+      const sel = selectedClip.value;
+      if (!sel) { showToast('请先选中一个轨道块'); return; }
+      if (isTrackLocked(sel.type, sel.trackId)) { showToast('轨道已锁定，无法编辑', 'info'); return; } // V21/V25
+      const t = findTrack(sel.type, sel.trackId);
+      const i = t.clips.findIndex(c => c.id === sel.clip.id);
+      if (i < 0) return;
+      const clip = t.clips[i];
+      const ph = phTime.value; // V26: 秒制播放头
+      if (ph <= clip.start + 0.04 || ph >= clip.start + clip.dur - 0.04) { showToast('播放头需位于选中轨道块内部'); return; }
+      snapshotState(); // V20: 分割前入撤销栈
+      const right = { id: nextClipId++, start: round2(ph), dur: round2(clip.start + clip.dur - ph),
+        gain: clip.gain ?? 1, fadeIn: 0, fadeOut: clip.fadeOut || 0 }; // V29: 右段继承音量/淡出, 淡入归零
+      clip.dur = round2(ph - clip.start);
+      clip.fadeOut = 0; // 左段淡出归零, 避免跨越分割点
+      t.clips.splice(i + 1, 0, right);
+      selectedLoc.value = { type: sel.type, trackId: t.id, clipId: right.id };
+      showToast('已在播放头处分割');
+      nextTick(() => {
+        lucide.createIcons(); // 新 clip 内的 <i data-lucide> 需补转换
+        const leftEl = document.querySelector(`[data-clip-id="${clip.id}"]`);
+        const rightEl = document.querySelector(`[data-clip-id="${right.id}"]`);
+        if (leftEl) gsap.from(leftEl, { x: -5, duration: 0.15, ease: 'power2.out' });   // 分离动画
+        if (rightEl) gsap.from(rightEl, { x: 5, duration: 0.15, ease: 'power2.out' });
+      });
+    };
+
+    // === V29: 音频剪辑 — 波形播放进度 / 淡变百分比 / 淡变拖拽 ===
+    const clipPlayedPct = (clip) => (phTime.value - clip.start) / clip.dur; // wave-canvas 内部 clamp 0..1
+    const fadePctOf = (clip, side) => Math.min(0.5, ((side === 'in' ? (clip.fadeIn || 0) : (clip.fadeOut || 0))) / clip.dur);
+    const fadeDrag = ref(null); // { clipId, side } — 拖拽会话态, 手柄常亮
+    function startFadeDrag(e, clip, side) {
+      const track = audioTracks.value.find(t => t.clips.some(c => c.id === clip.id));
+      if (!track || track.locked) { showToast('轨道已锁定，无法编辑', 'info'); return; }
+      e.preventDefault();
+      fadeDrag.value = { clipId: clip.id, side };
+      const startX = e.clientX;
+      const startVal = side === 'in' ? (clip.fadeIn || 0) : (clip.fadeOut || 0);
+      let lastEvt = null, fadeRaf = false, alive = true; // V30: rAF 节流
+      const applyMove = (ev) => {
+        const dSec = (ev.clientX - startX) / ppsPx.value; // V26: 像素→秒 唯一换算
+        const v = Math.max(0, round2(startVal + (side === 'in' ? dSec : -dSec)));
+        const cap = Math.max(0, clip.dur / 2 - 0.05);
+        if (side === 'in') clip.fadeIn = Math.min(v, cap); else clip.fadeOut = Math.min(v, cap);
+      };
+      const onMove = (ev) => {
+        lastEvt = ev;
+        if (fadeRaf) return;
+        fadeRaf = true;
+        requestAnimationFrame(() => {
+          fadeRaf = false;
+          if (alive && lastEvt) applyMove(lastEvt);
+        });
+      };
+      const onUp = () => {
+        alive = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        fadeDrag.value = null;
+        if ((clip.fadeIn || 0) > 0 || (clip.fadeOut || 0) > 0) showToast(`淡${side === 'in' ? '入' : '出'} ${(side === 'in' ? clip.fadeIn : clip.fadeOut).toFixed(1)}s`, 'info');
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }
+
+    const deleteClip = () => {
+      const sel = selectedClip.value;
+      if (!sel) { showToast('请先选中一个轨道块'); return; }
+      if (isTrackLocked(sel.type, sel.trackId)) { showToast('轨道已锁定，无法编辑', 'info'); return; } // V21/V25
+      const t = findTrack(sel.type, sel.trackId);
+      const i = t.clips.findIndex(c => c.id === sel.clip.id);
+      if (i < 0) return;
+      snapshotState(); // V20: 删除前入撤销栈
+      const clip = t.clips[i];
+      const el = document.querySelector(`[data-clip-id="${clip.id}"]`);
+      const done = () => { t.clips.splice(i, 1); selectedLoc.value = null; showToast('轨道块已删除'); };
+      if (el) gsap.to(el, { scaleX: 0, opacity: 0, duration: 0.2, ease: 'power2.in', onComplete: done }); // 收缩消失
+      else done();
+    };
+
+    // === GSAP 动画控制 (与 base 一致) ===
+    const toggleEditMode = (mode) => {
+      if (mode) {
+        isEditing.value = true;
+        if (currentAsset.value?.type === 'VIDEO') {   // V25: 自动选中首条视频轨的首个片段
+          const t = videoTracks.value[0], c = t?.clips[0];
+          selectedLoc.value = c ? { type: 'video', trackId: t.id, clipId: c.id } : null;
+        } else if (currentAsset.value?.type === 'AUDIO') {
+          const t = audioTracks.value[0], c = t?.clips[0];
+          selectedLoc.value = c ? { type: 'audio', trackId: t.id, clipId: c.id } : null;
+        }
+        nextTick(() => {
+          lucide.createIcons(); // 编辑面板首次挂载时补齐图标
+          gsap.to('#floating-toolbar', { opacity: 0, scale: 0.9, y: 20, duration: 0.2, display: 'none' });
+          gsap.fromTo('#edit-panel',
+            { y: '100%', opacity: 0 },
+            { y: '0%', opacity: 1, duration: 0.5, ease: 'power4.out' }
+          );
+          // 工具条按钮 stagger 入场 (单一 GSAP 时间线, 无 setTimeout)
+          gsap.fromTo('#edit-panel .toolbar-btn',
+            { y: 8, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.3, stagger: 0.05, delay: 0.25, ease: 'power2.out', clearProps: 'all' }
+          );
+        });
+      } else {
+        gsap.to('#edit-panel', {
+          y: '100%', opacity: 0, duration: 0.4, ease: 'power3.in',
+          onComplete: () => {
+            isEditing.value = false;
+            selectedLoc.value = null;
+            nextTick(() => {
+              gsap.fromTo('#floating-toolbar',
+                { opacity: 0, scale: 0.9, y: 20, display: 'flex' },
+                { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: 'back.out(1.5)' }
+              );
+            });
+          }
+        });
+      }
+    };
+
+    // === Three.js (V16: 渲染循环协议化 — 建/挂起/恢复) ===
+    let scene, camera, renderer, controls, currentModel, gridHelper, loader;
+    let hemiLight, keyLight;
+    let renderLoopActive = false;
+
+    // V30: 按需渲染协议 — 相机 change / 材质 / 网格 / 补间 驱动单帧渲染, 空闲零 GPU 占用
+    let renderQueued = false;
+    let afterRenderCb = null; // V31: 单帧渲染完成后的一次性回调 (截图导出用)
+    const requestRender = () => {
+      if (!renderer || renderQueued) return;
+      renderQueued = true;
+      renderer.setAnimationLoop(() => {   // 单帧即停, 替代空转渲染循环
+        renderer.setAnimationLoop(null);
+        renderQueued = false;
+        controls.update();
+        renderer.render(scene, camera);
+        if (afterRenderCb) { const cb = afterRenderCb; afterRenderCb = null; cb(); } // V31
+      });
+    };
+    const renderOnceAndThen = (cb) => { afterRenderCb = cb; requestRender(); }; // V31
+    let dampingTailFrames = 0; // 阻尼惯性尾巴: 交互结束后补 30 帧, 保留滑动手感
+    const kickDampingTail = () => {
+      dampingTailFrames = 30;
+      const step = () => {
+        if (dampingTailFrames-- > 0) { requestRender(); requestAnimationFrame(step); }
+      };
+      requestAnimationFrame(step);
+    };
+
+    const suspendRender = () => {
+      if (renderer) { renderer.setAnimationLoop(null); renderQueued = false; }
+      renderLoopActive = false;
+      dampingTailFrames = 0;
+    };
+
+    const disposeModel = (obj) => {
+      if (!obj) return;
+      obj.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+    };
+
+    const SWATCH_TINTS = { gray: 0xffffff, blue: 0x93c5fd, orange: 0xfdba74 };
+    const applySwatchTint = () => {
+      if (!currentModel) return;
+      const tint = SWATCH_TINTS[activeSwatch.value];
+      currentModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          (Array.isArray(child.material) ? child.material : [child.material])
+            .forEach(m => { if (m.color) m.color.setHex(tint); });
+        }
+      });
+      requestRender(); // V30: 按需渲染
+    };
+    const setSwatch = (name) => { activeSwatch.value = name; applySwatchTint(); };
+
+    // === 线框 / 光照开关 (V18) ===
+    const applyWireframe = () => {
+      if (!currentModel) return;
+      currentModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          (Array.isArray(child.material) ? child.material : [child.material])
+            .forEach(m => { m.wireframe = wireframeOn.value; });
+        }
+      });
+      requestRender(); // V30: 按需渲染
+    };
+    const toggleWireframe = () => { wireframeOn.value = !wireframeOn.value; applyWireframe(); };
+
+    const toggleLights = () => {
+      lightsOn.value = !lightsOn.value;
+      if (keyLight) keyLight.intensity = lightsOn.value ? 2 : 0;
+      if (hemiLight) hemiLight.intensity = lightsOn.value ? 1.5 : 0.3;
+      requestRender(); // V30: 按需渲染
+    };
+
+    const initThree = () => {
+      // 幂等: renderer 已存在则重挂 canvas + 恢复渲染循环
+      // (关闭查看器时 Vue 会销毁 three-canvas 容器, canvas 需重新挂载)
+      if (renderer) {
+        const c = document.getElementById('three-canvas');
+        if (c && !c.contains(renderer.domElement)) {
+          c.appendChild(renderer.domElement);
+          camera.aspect = c.clientWidth / c.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(c.clientWidth, c.clientHeight);
+        }
+        requestRender(); // V30: 重挂 canvas 后按需渲染
+        return;
+      }
+      const container = document.getElementById('three-canvas');
+      if (!container) return;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      container.appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 1000);
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
+      hemiLight = new THREE.HemisphereLight(0xffffff, 0x333333, 1.5);
+      scene.add(hemiLight);
+      keyLight = new THREE.DirectionalLight(0xffffff, 2);
+      keyLight.position.set(5, 10, 7);
+      scene.add(keyLight);
+
+      gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x2a2a2a);
+      gridHelper.visible = showGrid.value;
+      scene.add(gridHelper);
+
+      loader = new GLTFLoader();
+      controls.addEventListener('change', requestRender); // V30: 轨道控制器驱动按需渲染
+      controls.addEventListener('end', kickDampingTail);  // V30: 阻尼惯性尾巴补帧
+      requestRender();
+      renderLoopActive = true; // 协议态标记: renderer 就绪 (渲染本身按需)
+    };
+
+    const load3DModel = (url, loadId) => {
+      if (!scene || !loader) return;
+
+      if (currentModel) { disposeModel(currentModel); scene.remove(currentModel); currentModel = null; }
+
+      loader.load(url, (gltf) => {
+        if (loadId !== currentLoadId) { disposeModel(gltf.scene); return; } // 竞态: 丢弃过期结果
+
+        currentModel = gltf.scene;
+        scene.add(currentModel);
+
+        const box = new THREE.Box3().setFromObject(currentModel);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        currentModel.position.x = -center.x;
+        currentModel.position.z = -center.z;
+        currentModel.position.y = -box.min.y;
+
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        modelInfo.value = { sizeY: size.y, maxDim }; // V29: 相机预设定位基准
+        camera.position.set(0, maxDim, maxDim * 2);
+        controls.target.set(0, maxDim / 2, 0);
+        controls.update();
+        fitGridToModel(maxDim); // V28: 网格盘随模型尺寸缩放
+
+        applySwatchTint();
+        applyWireframe();
+        applyMaterial(); // V20: 应用材质检查器当前参数
+        requestRender(); // V30: 按需渲染 (材质三件套已各带, 此为加载完成首帧兜底)
+        clearTransition(); // 事件收口, 替代 deepseek 的 setTimeout(300); V24: 统一走 clearTransition 取消兜底定时器
+      }, undefined, (err) => {
+        console.error('模型加载失败', err);
+        if (loadId === currentLoadId) {
+          // V27: 失败兜底 — 线框占位模型, 画布不留空; 错误 toast 引导重试
+          clearTransition();
+          if (currentModel) { disposeModel(currentModel); scene.remove(currentModel); }
+          currentModel = buildFallbackModel();
+          scene.add(currentModel);
+          camera.position.set(0, 2, 4);
+          controls.target.set(0, 0.8, 0);
+          controls.update();
+          modelInfo.value = { sizeY: 1.6, maxDim: 2 };
+          fitGridToModel(2); // V28: 兜底模型同样适配网格
+          requestRender(); // V30: 按需渲染
+          showToast('3D 模型加载失败，已显示占位模型', 'error');
+        }
+      });
+    };
+
+    // V28: 网格自适应模型尺寸 — 固定 10×20 网格在大模型下缩成一点 (用户报告: 版本切换后"网格没了");
+    // 开关状态不受影响, 仅缩放网格盘) 格宽对齐 1/2/5×10^n 数量级, 视觉效果如标尺底纹
+    const fitGridToModel = (maxDim) => {
+      if (!gridHelper || !maxDim || maxDim <= 0) return;
+      const rawCell = maxDim / 8;
+      const mag = Math.pow(10, Math.floor(Math.log10(rawCell)));
+      const cell = [1, 2, 5, 10].map(m => m * mag).find(c => c >= rawCell) || mag * 10;
+      const extent = cell * 20; // GridHelper 基准宽 10 (20 格)
+      gridHelper.scale.set(extent / 10, 1, extent / 10);
+      gridHelper.visible = showGrid.value; // 只同步开关状态, 不越权显隐
+    };
+
+    // V27: 线框占位模型 — GLB 不可达时兜底, 保持视口可交互
+    const buildFallbackModel = () => {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.7 });
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), mat);
+      box.position.y = 0.8;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.2, 4), mat);
+      cone.position.y = 2.2;
+      g.add(box, cone);
+      return g;
+    };
+
+    const toggleGrid = () => {
+      showGrid.value = !showGrid.value;
+      if (gridHelper) gridHelper.visible = showGrid.value;
+      requestRender(); // V30: 按需渲染
+    };
+
+    const resetCamera = () => {
+      if (currentModel) {
+        const box = new THREE.Box3().setFromObject(currentModel);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        camera.position.set(0, maxDim, maxDim * 2);
+        controls.target.set(0, maxDim / 2, 0);
+        controls.update();
+        fitGridToModel(maxDim); // V28: 网格盘随模型尺寸缩放
+        requestRender(); // V30: 按需渲染
+        showToast('视角已重置');
+      }
+    };
+
+    // V25: 音频轨静音 → 实际 mute 媒体元素 (全部音频轨静音才静音)
+    watch(() => audioTracks.value.map(t => !!t.muted), (ms) => {
+      if (mediaEl.value) mediaEl.value.muted = ms.length > 0 && ms.every(Boolean);
+    }, { deep: true });
+
+    // currentAsset 单一状态源: 卸载时挂起渲染 + 释放模型
+    watch(currentAsset, (asset) => {
+      if (!asset) {
+        suspendRender();
+        if (currentModel) { disposeModel(currentModel); scene.remove(currentModel); currentModel = null; }
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (renderer && currentAsset.value?.type === '3D') {
+        const container = document.getElementById('three-canvas');
+        if (container) {
+          camera.aspect = container.clientWidth / container.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(container.clientWidth, container.clientHeight);
+          requestRender(); // V30: 按需渲染
+        }
+      }
+    });
+
+    watch([currentAsset, toasts, isTransitioning, trackMenu, editingTrack], () => {
+      nextTick(() => { lucide.createIcons(); });
+    }, { deep: true });
+
+    onMounted(() => { lucide.createIcons(); });
+
+    // ===== V32: Cmd+K 命令面板 =====
+    const paletteOpen = ref(false);
+    const paletteInputEl = ref(null);
+    const paletteQuery = ref('');
+    const paletteIdx = ref(0);
+    const paletteRecents = ref(JSON.parse(localStorage.getItem('ah_cmd_recent') || '[]'));
+    const openPalette = () => { paletteOpen.value = true; paletteQuery.value = ''; paletteIdx.value = 0; nextTick(() => paletteInputEl.value && paletteInputEl.value.focus()); };
+    const closePalette = () => { paletteOpen.value = false; };
+    const runCommand = (cmd) => {
+      closePalette();
+      const i = paletteRecents.value.indexOf(cmd.id);
+      if (i >= 0) paletteRecents.value.splice(i, 1);
+      paletteRecents.value.unshift(cmd.id);
+      paletteRecents.value = paletteRecents.value.slice(0, 5);
+      localStorage.setItem('ah_cmd_recent', JSON.stringify(paletteRecents.value));
+      nextTick(() => cmd.run());
+    };
+    const paletteGroups = computed(() => {
+      const A = currentAsset.value, type = A?.type, editing = isEditing.value;
+      const cmds = [];
+      // 视图
+      cmds.push({ id: 'go-lib', group: '视图', name: '返回资产库', hint: 'Esc', icon: 'arrow-left', run: () => { closeViewer(); currentView.value = 'library'; } });
+      if (A && !editing) cmds.push({ id: 'enter-edit', group: '视图', name: '进入编辑模式', hint: '⌘E', icon: 'pen-tool', run: () => toggleEditMode(true) });
+      if (A && editing) cmds.push({ id: 'exit-edit', group: '视图', name: '退出编辑模式', hint: 'Esc', icon: 'eye', run: () => toggleEditMode(false) });
+      if (A) cmds.push({ id: 'close-viewer', group: '视图', name: '关闭查看器', hint: 'Esc', icon: 'x', run: closeViewer });
+      // 播放
+      if (type === 'VIDEO' || type === 'AUDIO') {
+        cmds.push({ id: 'play-toggle', group: '播放', name: isPlaying.value ? '暂停' : '播放', hint: 'Space', icon: isPlaying.value ? 'pause' : 'play', run: togglePlay });
+        cmds.push({ id: 'seek-home', group: '播放', name: '跳到开头', hint: 'Home', icon: 'skip-back', run: seekHome });
+        cmds.push({ id: 'seek-end', group: '播放', name: '跳到结尾', hint: 'End', icon: 'skip-forward', run: seekEnd });
+        cmds.push({ id: 'step-bk', group: '播放', name: '后退一帧', hint: '←', icon: 'chevron-left', run: () => seekToTime(phTime.value - 1 / 24) });
+        cmds.push({ id: 'step-fw', group: '播放', name: '前进一帧', hint: '→', icon: 'chevron-right', run: () => seekToTime(phTime.value + 1 / 24) });
+      }
+      // 剪辑 (时间线类)
+      if ((type === 'VIDEO' || type === 'AUDIO')) {
+        cmds.push({ id: 'split', group: '剪辑', name: '在播放头处分割选中片段', hint: 'S', icon: 'scissors', disabled: !selectedLoc.value, run: splitClip });
+        cmds.push({ id: 'del-clip', group: '剪辑', name: '删除选中片段', hint: 'Del', icon: 'trash-2', disabled: !selectedLoc.value, run: deleteClip });
+        cmds.push({ id: 'undo', group: '剪辑', name: '撤销', hint: '⌘Z', icon: 'undo-2', disabled: !undoStack.value.length, run: undoEdit });
+        if (type === 'VIDEO') cmds.push({ id: 'add-vtrack', group: '剪辑', name: '添加视频轨', icon: 'plus', run: () => addTrack('video') });
+        cmds.push({ id: 'add-atrack', group: '剪辑', name: '添加音频轨', icon: 'plus', run: () => addTrack('audio') });
+      }
+      // 3D
+      if (type === '3D') {
+        cmds.push({ id: 'wire', group: '3D', name: wireframeOn.value ? '关闭线框' : '线框模式', icon: 'box', run: toggleWireframe });
+        cmds.push({ id: 'lights', group: '3D', name: lightsOn.value ? '关闭灯光' : '打开灯光', icon: 'lightbulb', run: toggleLights });
+        cmds.push({ id: 'grid3d', group: '3D', name: '网格开关', icon: 'layout-grid', run: toggleGrid });
+        cmds.push({ id: 'cam-reset', group: '3D', name: '重置视角', icon: 'maximize', run: resetCamera });
+        [['iso', '等轴 45°'], ['top', '顶视'], ['front', '正视'], ['side', '侧视']].forEach(([k, n]) =>
+          cmds.push({ id: 'cam-' + k, group: '3D', name: '机位 · ' + n, icon: 'video', run: () => camPreset(k) }));
+      }
+      // 图片
+      if (type === 'IMAGE') {
+        cmds.push({ id: 'crop', group: '图片', name: cropMode.value ? '退出裁切模式' : '进入裁切模式', icon: 'crop', run: () => { cropMode.value = !cropMode.value; if (!cropMode.value) cropApplied.value = false; } });
+        cmds.push({ id: 'img-reset', group: '图片', name: '重置全部调整', icon: 'rotate-ccw', run: resetImgAdjust });
+      }
+      // 导出
+      if (A) cmds.push({ id: 'export', group: '导出', name: '导出当前资产', icon: 'download', run: () => { addExportJob(); showQueue.value = true; showToast('已加入渲染队列', 'info'); } });
+      cmds.push({ id: 'queue', group: '导出', name: showQueue.value ? '关闭渲染队列' : '打开渲染队列', icon: 'list-video', run: () => { showQueue.value = !showQueue.value; showToast(showQueue.value ? '渲染队列已打开' : '渲染队列已关闭', 'info'); } });
+      // 应用
+      cmds.push({ id: 'fav-view', group: '应用', name: libFavOnly.value ? '退出收藏视图' : '只看收藏资产', icon: 'star', run: () => { libFavOnly.value = !libFavOnly.value; currentView.value = 'library'; closeViewer(); showToast(libFavOnly.value ? '只看收藏' : '显示全部资产', 'info'); } });
+      // 过滤
+      const q = paletteQuery.value.trim().toLowerCase();
+      let list = q ? cmds.filter(c => (c.group + c.name + (c.hint || '')).toLowerCase().includes(q)) : cmds;
+      // 空查询时置顶的最近使用
+      const rec = paletteRecents.value.map(id => list.find(c => c.id === id)).filter(Boolean);
+      if (!q && rec.length) {
+        const recIds = new Set(rec.map(c => c.id));
+        list = [...rec, ...list.filter(c => !recIds.has(c.id))];
+      }
+      // 分组保序输出
+      const groups = [];
+      for (const c of list) {
+        let g = groups.find(g => g.name === c.group);
+        if (!g) { g = { name: c.group, items: [] }; groups.push(g); }
+        g.items.push(c);
+      }
+      return groups;
+    });
+    const paletteFlat = computed(() => paletteGroups.value.flatMap(g => g.items));
+    const paletteKeydown = (e) => {
+      const flat = paletteFlat.value;
+      if (e.key === 'ArrowDown') { paletteIdx.value = Math.min(flat.length - 1, paletteIdx.value + 1); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { paletteIdx.value = Math.max(0, paletteIdx.value - 1); e.preventDefault(); }
+      else if (e.key === 'Enter') {
+        const cmd = flat[paletteIdx.value];
+        if (cmd && !cmd.disabled) runCommand(cmd);
+        e.preventDefault();
+      } else if (e.key === 'Escape') { closePalette(); e.preventDefault(); e.stopPropagation(); }
+    };
+
+    // V26: 测试/调试句柄 — 只读探针 + 白名单寻址, 不影响运行时行为
+    // V32 test probes
+    Object.defineProperty(window, '__AH_paletteOpen', { get: () => paletteOpen.value });
+    Object.defineProperty(window, '__AH_paletteCount', { get: () => paletteFlat.value.length });
+    window.__AH = {
+      get videoTracks() { return videoTracks.value; }, get audioTracks() { return audioTracks.value; },
+      get phTime() { return phTime.value; }, get tlDuration() { return tlDuration.value; },
+      get ppsPx() { return ppsPx.value; }, get rulerStep() { return rulerStep.value; },
+      get mediaDuration() { return mediaDuration.value; },
+      get mediaError() { return mediaError.value; }, get toasts() { return toasts.value; },
+      get isTransitioning() { return isTransitioning.value; },
+      get isPlaying() { return isPlaying.value; },
+      get assets() { return assets.value; },
+      get isEditing() { return isEditing.value; },
+      // V28: 3D 网格状态探针 (测试用)
+      get gridVisible() { return gridHelper ? gridHelper.visible : null; },
+      get gridScale() { return gridHelper ? gridHelper.scale.x : null; },
+      // V29: 波形/剪辑参数/机位探针 (测试用)
+      get wavePeaks() { return wavePeaks.value; },
+      get fadeDrag() { return fadeDrag.value; },
+      get modelInfo() { return modelInfo.value; },
+      get camMenuOpen() { return camMenuOpen.value; },
+      get matMenuOpen() { return matMenuOpen.value; },
+      get cropMode() { return cropMode.value; },
+      get cropApplied() { return cropApplied.value; },
+      // V31: 导出队列探针 (测试用)
+      get exports() { return exportJobs.value.map(j => ({ name: j.name, status: j.status, progress: j.progress, size: j.size || 0 })); },
+      seekToTime, fmtTC, fmtTCframes, fmtTCms, timeToX, retryLoad, showToast
+    };
+
+    return {
+      // V32: library management & command palette
+      libSearch, libTypeFilter, libTagFilter, libFavOnly,
+      // V33: hybrid command search / tag overflow / pagination
+      libCmdMode, libCmdFlat, libCmdGroups, libCmdIdx, libSearchKeydown, runLibCmd, enterLibCmd,
+      libTagsExpanded, libPage, libPageSize, libPageCount, pagedAssets,
+      LIB_TYPE_FILTERS, allTags, filteredAssets,
+      favorites, isFav, toggleFav,
+      paletteOpen, paletteQuery, paletteIdx, paletteGroups, paletteFlat,
+      openPalette, closePalette, runCommand, paletteKeydown,
+      currentView, currentAsset, isEditing, showGrid, toasts, assets,
+      isTransitioning, activeSwatch,
+      isPlaying, phTime, wireframeOn, lightsOn, mediaEl, timelineEl,
+      showToast, dismissToast, getTypeIcon, openViewer, closeViewer, switchVersion,
+      mediaError, retryLoad, TOAST_LIFE,
+      onMediaReady, onMediaError, setSwatch,
+      togglePlay, onTimeUpdate, startDrag, seekFromClick,
+      toggleWireframe, toggleLights,
+      toggleGrid, resetCamera, toggleEditMode,
+      // V19→V25: 轨道交互 (多轨道模型)
+      videoTracks, audioTracks, selectedLoc, draggingClipId, MAX_TRACKS,
+      tracksOf, findTrack, isTrackLocked, renumberTracks, firstVideoClip, firstAudioClip,
+      trackMenu, editingTrack,
+      addTrack, deleteTrack, openTrackMenu, toggleTrackLock, toggleTrackVis,
+      startRenameTrack, commitRenameTrack, cancelRenameTrack,
+      startTrackReorder, syncHeadsScroll, headsListEl, laneScrollEl,
+      startClipDrag, startClipTrim, onTrackRowClick, splitClip, deleteClip,
+      // V20: 渲染队列 / 分型编辑 / 图片调整 / 撤销
+      exportJobs, showQueue, addExportJob, clearDoneJobs, downloadJob, fmtSize,
+      matMetalness, matRoughness, applyMaterial,
+      imgAdjust, imgRotate, imgFlipX, imgFilterStr, imgTransform, resetImgAdjust,
+      // V29: 滤镜预设 / 裁切模式 / 相机预设 / 材质弹层 / 音频剪辑参数
+      imgPresets, applyImgPreset,
+      cropMode, cropRect, cropAspect, cropApplied, cropClipPath, cropBoxStyle,
+      setCropAspect, startCropMove, startCropResize, applyCrop, exitCrop,
+      modelInfo, camMenuOpen, matMenuOpen, camPreset,
+      clipPlayedPct, fadePctOf, fadeDrag, startFadeDrag,
+      trimTip, editLabel, undoStack, undoEdit,
+      // V21: 轨道头 / 帧级时间码 / 真实缩略图与波形
+      playheadTC, rulerTicks, wavePeaks, videoStripUrl, // V29: 波形引擎 (替代 waveBars)
+      // V22: 走带 / 缩放 / 吸附 / 检查器
+      snapOn, tlZoom, seekHome, seekEnd, stepBy, jumpToEditPoint, fmtTC, totalTC,
+      selectedClip, clipInTC, clipOutTC, clipDurTC, clipStartTC,
+      // V26: 统一时间模型 (秒制 + 像素/秒 单一换算)
+      ppsPx, tlDuration, tlWidth, phX, timeToX, seekToTime, rulerStep,
+      gridBg, gridBgSize, minorGridBg, minorGridSize,
+      miniClipStyle, miniPhPct, audioCardPhPct, projectRateBadge,
+      fmtTCframes, fmtTCms, isAudioTC, tcPlaceholder, parseDur, fmtClock, round2,
+      healDurations, baselineDurOf, mediaDuration,
+      // V23: 编辑器高度拖拽 / 检查器收起 / Schema 元数据
+      editorHeightPct, editorDragging, startEditorResize, inspectorCollapsed,
+      viewerMetaRows, activeVerInfo, versionOf, metaRowsOf
+    };
+  }
+});
+
+/* ==== V29: 波形画布 — min/max 峰值逐像素绘制, 已播放高亮 + 淡入淡出三角 + 音量振幅 ==== */
+app.component('wave-canvas', {
+  props: {
+    peaks: { type: Object, default: null },
+    played: { type: Number, default: 0 },
+    fadeInPct: { type: Number, default: 0 },
+    fadeOutPct: { type: Number, default: 0 },
+    gain: { type: Number, default: 1 },
+    color: { type: String, default: '#34d399' },
+  },
+  template: '<canvas class="absolute inset-0 w-full h-full pointer-events-none"></canvas>',
+  mounted() {
+    this._ro = new ResizeObserver(() => this.draw()); // 片段宽度/缩放变化 → 重绘
+    this._ro.observe(this.$el);
+    this.draw();
+  },
+  unmounted() { if (this._ro) this._ro.disconnect(); },
+  watch: { peaks: 'draw', played: 'draw', fadeInPct: 'draw', fadeOutPct: 'draw', gain: 'draw' },
+  methods: {
+    // V30: 双缓冲 — 静态层 (未播放色 + 淡变三角) 仅结构性变化时重建;
+    //      已播放层增量维护 (前进只补新列, 回 seek 才重建), 播放时每帧 O(新增列数) 而非 O(宽度)
+    _layer(w, h, dpr) {
+      const cv = document.createElement('canvas');
+      cv.width = w * dpr | 0; cv.height = h * dpr | 0;
+      const ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineWidth = 1;
+      return [cv, ctx];
+    },
+    _strokeRange(ctx, P, N, mid, ampScale, x0, x1, w, solid) {
+      const col = solid ? this.color : this.color + '59'; // 未播放 35% 透明
+      ctx.strokeStyle = col;
+      const xi0 = Math.max(0, x0 | 0), xi1 = Math.min(w, Math.ceil(x1));
+      for (let x = xi0; x < xi1; x++) {
+        const idx = Math.min(N - 1, (x / w * N) | 0);
+        const hi = Math.max(0.4, P.max[idx] * mid * 0.92 * ampScale);
+        const lo = Math.min(-0.4, P.min[idx] * mid * 0.92 * ampScale);
+        ctx.beginPath(); ctx.moveTo(x + 0.5, mid - hi); ctx.lineTo(x + 0.5, mid - lo); ctx.stroke();
+      }
+    },
+    draw() {
+      const c = this.$el;
+      if (!c || !c.getContext) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth, h = c.clientHeight;
+      if (!w || !h) return;
+      const ctx = c.getContext('2d');
+      const P = this.peaks;
+      if (!P || !P.min) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); return; }
+      const resized = c.width !== (w * dpr | 0) || c.height !== (h * dpr | 0);
+      if (resized) { c.width = w * dpr | 0; c.height = h * dpr | 0; }
+      const N = P.min.length, mid = h / 2;
+      const g = Math.min(2, Math.max(0, this.gain));
+      const ampScale = (0.3 + 0.7 * Math.min(1, g)) * (g > 1 ? 1 + (g - 1) * 0.3 : 1);
+      const playedX = Math.min(1, Math.max(0, this.played)) * w;
+      // 结构签名: 任一变化 → 双层的静态层与已播放层都重建
+      const sig = [P.url || P.real, this.gain, this.fadeInPct, this.fadeOutPct, this.color, w | 0, h | 0, dpr].join('|');
+      if (resized || sig !== this._sig) {
+        this._sig = sig;
+        const [base, bctx] = this._layer(w, h, dpr);
+        this._strokeRange(bctx, P, N, mid, ampScale, 0, w, w, false);
+        const fi = Math.min(1, Math.max(0, this.fadeInPct)) * w;
+        const fo = Math.min(1, Math.max(0, this.fadeOutPct)) * w;
+        bctx.fillStyle = 'rgba(255,255,255,0.16)';
+        if (fi > 1) { bctx.beginPath(); bctx.moveTo(0, h); bctx.lineTo(fi, h); bctx.lineTo(0, 0); bctx.closePath(); bctx.fill(); }
+        if (fo > 1) { bctx.beginPath(); bctx.moveTo(w, h); bctx.lineTo(w - fo, h); bctx.lineTo(w, 0); bctx.closePath(); bctx.fill(); }
+        this._base = base;
+        const [pcv, pctx] = this._layer(w, h, dpr);
+        this._strokeRange(pctx, P, N, mid, ampScale, 0, playedX, w, true);
+        this._playedC = pcv;
+        this._playedX = playedX;
+      } else if (playedX > this._playedX) { // 前进: 增量补列
+        const pctx = this._playedC.getContext('2d');
+        pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this._strokeRange(pctx, P, N, mid, ampScale, this._playedX, playedX, w, true);
+        this._playedX = playedX;
+      } else if (playedX < this._playedX) { // 回 seek: 重建已播放层
+        const [pcv, pctx] = this._layer(w, h, dpr);
+        this._strokeRange(pctx, P, N, mid, ampScale, 0, playedX, w, true);
+        this._playedC = pcv;
+        this._playedX = playedX;
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(this._base, 0, 0);
+      ctx.drawImage(this._playedC, 0, 0);
+    }
+  }
+});
+
+/* ==== V23: 全局可复用组件 (mount 前注册; 元数据行 / 轨道头 两处以上复用) ==== */
+app.component('meta-row', {
+  props: { label: { type: String, required: true }, value: { type: String, default: '—' } },
+  template: '<div class="flex justify-between items-baseline gap-2 leading-4">'
+    + '<span class="text-zinc-500 shrink-0">{{ label }}</span>'
+    + '<span class="font-mono text-zinc-300 truncate text-right">{{ value }}</span></div>'
+});
+
+// V25: 轨道头组件升级 — 右键菜单 / grip 排序 / 内联重命名 / 根节点带 data-track-type 供排序寻址
+app.component('track-head', {
+  props: {
+    badge: { type: String, required: true },
+    badgeClass: { type: String, default: '' },
+    count: { type: Number, required: true },
+    heightPx: { type: Number, default: 48 },
+    locked: Boolean,
+    off: Boolean,
+    lockTitle: { type: String, default: '' },
+    toggleTitle: { type: String, default: '' },
+    onIcon: { type: String, default: 'eye' },
+    offIcon: { type: String, default: 'eye-off' },
+    editing: Boolean,
+    draft: { type: String, default: '' }
+  },
+  emits: ['toggle-lock', 'toggle-vis', 'ctx', 'reorder-start', 'commit-rename', 'cancel-rename', 'update:draft'],
+  template: '<div class="track-head shrink-0 rounded bg-[#0a0a0c] border border-zinc-800 pl-1 pr-2 flex items-center gap-1"'
+    + ' :style="{ height: heightPx + \'px\' }"'
+    + ' :class="{ \'opacity-60\': off }"'
+    + ' @contextmenu.prevent="$emit(\'ctx\', $event)">'
+    + '<button class="reorder-grip" title="拖动调整轨道顺序" @mousedown.prevent="$emit(\'reorder-start\', $event)">'
+    + '<i data-lucide="grip-vertical" class="w-3 h-3 pointer-events-none"></i></button>'
+    + '<input v-if="editing" class="rename-input" :value="draft" spellcheck="false"'
+    + '  @input="$emit(\'update:draft\', $event.target.value)"'
+    + '  @keydown.enter.prevent="$emit(\'commit-rename\')" @keydown.esc.prevent="$emit(\'cancel-rename\')" @blur="$emit(\'commit-rename\')" />'
+    + '<span v-else class="track-badge shrink-0" :class="badgeClass">{{ badge }}</span>'
+    + '<span class="flex-1 truncate text-[11px] font-bold text-zinc-300">{{ count }} 个片段</span>'
+    + '<button class="track-head-btn" :class="{ locked }" :title="lockTitle" @click="$emit(\'toggle-lock\')">'
+    + '<i data-lucide="lock" class="w-3 h-3 icon-on"></i><i data-lucide="lock-open" class="w-3 h-3 icon-off"></i></button>'
+    + '<button class="track-head-btn track-toggle" :class="{ off }" :title="toggleTitle" @click="$emit(\'toggle-vis\')">'
+    + '<i :data-lucide="onIcon" class="w-3.5 h-3.5 icon-on"></i><i :data-lucide="offIcon" class="w-3.5 h-3.5 icon-off"></i></button>'
+    + '</div>'
+});
+
+app.mount('#app');
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@
 ASSET//HUB：免费游戏素材导航控制台。纯前端、无后端、数据静态、状态存 localStorage。
 
 - `prototype/base.html`（v22）：原始单文件原型，功能规格 / UI/UX / design token 的最高基准
+- `prototype/asset-hub-v17.html`：资产工作台交互原型（mock 数据），**只作资产域信息架构与交互的参考基准**，design token 仍以 v22 为准
 - 当前实现：`src/`（Vite + Vue 3 `<script setup>` + TypeScript + Tailwind v4 + pnpm），已完成原型全量迁移
 - 素材原始包在 `assets/`（已从版本控制移除，见 `.gitignore`），尚未接入
 
@@ -23,12 +24,13 @@ ASSET//HUB：免费游戏素材导航控制台。纯前端、无后端、数据�
 
 ## 3. 文档职责
 
-| 文档                    | 只写什么                             |
-| ----------------------- | ------------------------------------ |
-| `README.md`             | 项目门面：简介、功能、快速开始、导航 |
-| `AGENTS.md`             | AI 行为约束与验证清单                |
-| `docs/design-tokens.md` | 设计系统参考                         |
-| `docs/development.md`   | 版本 / 分支 / 提交 / hooks 规范      |
+| 文档                    | 只写什么                              |
+| ----------------------- | ------------------------------------- |
+| `README.md`             | 项目门面：简介、功能、快速开始、导航  |
+| `AGENTS.md`             | AI 行为约束与验证清单                 |
+| `docs/design-tokens.md` | 设计系统参考                          |
+| `docs/development.md`   | 版本 / 分支 / 提交 / hooks / 部署规范 |
+| `docs/product.md`       | 产品定位、业务域、特色、路线图        |
 
 单一职责、见名知意、≤230 行；超限先拆分再写。内容更新同步改对应文档，不跨文档复制段落。
 
