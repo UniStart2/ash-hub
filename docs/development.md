@@ -6,7 +6,9 @@
 
 `MAJOR.MINOR.PATCH`：不兼容变更 / 新功能 / 修复。1.0.0 之前 minor 可含不兼容变更。发布在 `main` 打 tag（`v0.1.0`）。
 
-## 分支模型
+补充规矩：原型稿版本号（v22、V17 等）是历史文物，留在文件名，**不是**产品版本；功能分支不带版本号。产品版本唯一来源是 `package.json` + git tag。
+
+## 分支模型：Git Flow
 
 | 分支            | 用途                                    |
 | --------------- | --------------------------------------- |
@@ -15,6 +17,13 @@
 | `feat/<scope>`  | 新功能，从 `develop` 切出，PR 合回      |
 | `fix/<scope>`   | 修复，同上                              |
 | `release/x.y.z` | 发布准备 → `main` + 回合 `develop`      |
+
+功能分支的合并方式（按阶段）：
+
+- **单人阶段（当前）**：功能分支本地合并进 `develop`（`git merge --no-ff`），随后 push `develop`；合并后删除功能分支。不强制 PR
+- **团队协作阶段**：恢复 push 功能分支 + PR 评审流程，本文档届时同步修订
+
+CI 部署挂在 `main`：合 `develop` 不触发线上变更；`main` 仅接受 `release/*` / hotfix 合入，**任何阶段禁止直推**。1.0 之前 release 仪式可简化为：develop 稳定后直开 `release/x.y.z` 打 tag。
 
 ## 提交：Conventional Commits
 
@@ -59,7 +68,7 @@ lint-staged 规则：
 
 ## 合并要求
 
-- 所有变更走 PR，禁止直推 `main` / `develop`
+- `main` 禁止直推，仅经 `release/*` / hotfix 合入；`develop` 由功能分支合并后 push（单人阶段不强制 PR，见分支模型一节）
 - AI 实质性参与的提交带 trailer：`AI-Assisted: true`
 - 合并前回归测试；完成度以验收交付物计，不以生成量计
 

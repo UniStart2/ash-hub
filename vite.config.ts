@@ -7,6 +7,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/',
   plugins: [vue(), tailwindcss()],
+  // prototype/ 是参考文档不是构建输入：默认扫描会把其中的 HTML 当入口解析其依赖
+  optimizeDeps: { entries: ['index.html'] },
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.test.ts'],

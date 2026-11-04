@@ -4,11 +4,13 @@
 
 ## 1. 项目现状
 
-ASSET//HUB：免费游戏素材导航控制台。纯前端、无后端、数据静态、状态存 localStorage。
+ASSET//HUB：面向独立游戏开发者的**游戏素材一体化管理平台**（发现 → 获取 → 管理 → 加工）。定位与路线图见 [docs/product.md](docs/product.md)，纯前端、本地优先、状态存 localStorage。
 
-- `prototype/base.html`（v22）：原始单文件原型，功能规格 / UI/UX / design token 的最高基准
+- `prototype/base.html`（v22）：发现域原始原型，功能规格 / UI/UX / design token 的最高基准
 - `prototype/asset-hub-v17.html`：资产工作台交互原型（mock 数据），**只作资产域信息架构与交互的参考基准**，design token 仍以 v22 为准
-- 当前实现：`src/`（Vite + Vue 3 `<script setup>` + TypeScript + Tailwind v4 + pnpm），已完成原型全量迁移
+- 当前实现：`src/`（Vite + Vue 3 `<script setup>` + TypeScript + Tailwind v4 + pnpm）
+  - 发现模块：`src/modules/discover/`（站点导航，已完成原型全量迁移）
+  - 资产库模块：`src/modules/library/`（P1 骨架：数据模型 + mock + 列表，按 docs/specs/p1-platform-skeleton.md 实现）
 - 素材原始包在 `assets/`（已从版本控制移除，见 `.gitignore`），尚未接入
 
 ## 2. base.html 是最高基准
@@ -17,10 +19,11 @@ ASSET//HUB：免费游戏素材导航控制台。纯前端、无后端、数据�
 
 - 组件化重写须像素级保留视觉与交互；改设计单独提交并说明理由
 - 迁移顺序：先抽 tokens → 再抽组件 → 最后接状态（composables，不引入全局状态库）
-- localStorage 键名冻结：`ah_favs` / `ah_recent` / `ah_custom_order`
-- URL hash 参数冻结：`q` / `fav` / `types` / `licenses` / `registers`
+- localStorage 键名冻结：发现域 `ah_favs` / `ah_recent` / `ah_custom_order`；资产域 `ah_assets_*`（P1：`ah_assets_favs`）。两域键零交叉
+- URL hash 参数冻结：发现域 `q` / `fav` / `types` / `licenses` / `registers`；应用级 `view`（`sites` 缺省 / `library`）
 - 站点数据结构冻结：`{ name, url, desc, types, license, register, tags, featured?, addedAt? }`（运行时派生 `isNew`）
-- 快捷键表冻结：`/` `R` `G` `L` `S` `?` `Esc` `Ctrl/Cmd+K`，收拢为单一 composable
+- 资产数据结构见 `src/modules/library/types.ts`（`Asset` / `AssetVersion` / `AssetSource`，UUIDv7）
+- 快捷键表冻结：`/` `R` `G` `L` `S` `?` `Esc` `Ctrl/Cmd+K`，收拢为单一 composable；模块切换不新增按键
 
 ## 3. 文档职责
 
