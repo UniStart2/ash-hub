@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue';
 import type { ActiveFilters, FilterKey, Site } from '../types';
 import { filterSites } from '../lib/filter';
+import { readJson, STORAGE_KEYS } from '../lib/storage';
 
 const EMPTY_FILTERS = (): ActiveFilters => ({ types: [], licenses: [], registers: [] });
 
@@ -15,8 +16,8 @@ export function useSiteCatalog(allSites: Site[]) {
   const currentPage = ref(1);
   const pageSize = ref(12);
 
-  const favorites = ref<string[]>(JSON.parse(localStorage.getItem('ah_favs') || '[]'));
-  const customOrder = ref<string[]>(JSON.parse(localStorage.getItem('ah_custom_order') || '[]'));
+  const favorites = ref<string[]>(readJson(STORAGE_KEYS.favs, []));
+  const customOrder = ref<string[]>(readJson(STORAGE_KEYS.customOrder, []));
 
   const filteredSites = computed(() =>
     filterSites(sites.value, {
@@ -70,7 +71,7 @@ export function useSiteCatalog(allSites: Site[]) {
     const index = favorites.value.indexOf(site.url);
     if (index > -1) favorites.value.splice(index, 1);
     else favorites.value.push(site.url);
-    localStorage.setItem('ah_favs', JSON.stringify(favorites.value));
+    localStorage.setItem(STORAGE_KEYS.favs, JSON.stringify(favorites.value));
   }
 
   function changePage(p: number) {

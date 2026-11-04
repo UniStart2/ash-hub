@@ -2,12 +2,11 @@ import { computed, ref } from 'vue';
 import type { Asset, AssetType } from './types';
 import type { AssetRepository } from './repository';
 import { filterAssets } from './filters';
-
-const FAV_KEY = 'ah_assets_favs';
+import { readJson, STORAGE_KEYS } from '../../lib/storage';
 
 /**
  * 资产库列表状态：搜索 / 类型与标签筛选 / 收藏。
- * 与发现域 useSiteCatalog 同构但完全隔离：收藏键 ah_assets_favs，
+ * 与发现域 useSiteCatalog 同构但完全隔离：收藏键 ash-hub_assets_favs，
  * 数据经 Repository 异步载入（P1 为 mock 实现，切换实现时本文件不动）。
  */
 export function useAssetLibrary(repo: AssetRepository) {
@@ -17,7 +16,7 @@ export function useAssetLibrary(repo: AssetRepository) {
   const activeTypes = ref<AssetType[]>([]);
   const activeTags = ref<string[]>([]);
   const favOnly = ref(false);
-  const favorites = ref<string[]>(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
+  const favorites = ref<string[]>(readJson(STORAGE_KEYS.assetFavs, []));
 
   void repo.list().then((list) => {
     assets.value = list;
@@ -57,7 +56,7 @@ export function useAssetLibrary(repo: AssetRepository) {
     const i = favorites.value.indexOf(uuid);
     if (i > -1) favorites.value.splice(i, 1);
     else favorites.value.push(uuid);
-    localStorage.setItem(FAV_KEY, JSON.stringify(favorites.value));
+    localStorage.setItem(STORAGE_KEYS.assetFavs, JSON.stringify(favorites.value));
   }
 
   function resetFilters() {
