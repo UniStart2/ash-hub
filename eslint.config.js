@@ -10,21 +10,9 @@ export default tseslint.config(
   prettier,
   {
     files: ['**/*.{ts,vue}'],
-    languageOptions: {
-      globals: {
-        window: 'readonly',
-        document: 'readonly',
-        localStorage: 'readonly',
-        navigator: 'readonly',
-        history: 'readonly',
-        URLSearchParams: 'readonly',
-        MouseEvent: 'readonly',
-        HTMLElement: 'readonly',
-        HTMLInputElement: 'readonly',
-        CustomEvent: 'readonly',
-        DragEvent: 'readonly',
-        setTimeout: 'readonly',
-      },
+    rules: {
+      // 未定义标识符由 vue-tsc 检查（build 即类型检查），no-undef 对 TS 是重复且需手写全局白名单
+      'no-undef': 'off',
     },
   },
   {

@@ -2,14 +2,18 @@
 import { useAppView } from '../composables/useAppView';
 import SitesView from '../modules/discover/SitesView.vue';
 import LibraryView from '../modules/library/LibraryView.vue';
+import AppToast from './AppToast.vue';
 
-// 壳层只负责模块切换与视图出口；两视图组件互不感知，背景与布局各自携带
+// 壳层只负责模块切换与视图出口；两视图组件互不感知，背景与布局各自携带。
+// toast 属全局能力，挂在壳层：两个模块共用同一通知层。
 const { view } = useAppView();
 </script>
 
 <template>
   <SitesView v-if="view === 'sites'" />
   <LibraryView v-else />
+
+  <AppToast />
 
   <!-- 模块切换 HUD：壳层所有，未来新增视图无需改动视图内部 -->
   <nav

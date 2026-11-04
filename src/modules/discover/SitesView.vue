@@ -13,7 +13,6 @@ import AppSidebar from '../../components/AppSidebar.vue';
 import SiteCard from '../../components/SiteCard.vue';
 import AppPagination from '../../components/AppPagination.vue';
 import EmptyState from '../../components/EmptyState.vue';
-import AppToast from '../../components/AppToast.vue';
 import CommandPalette from '../../components/CommandPalette.vue';
 import ContextMenu from '../../components/ContextMenu.vue';
 import type { FilterKey } from '../../types';
@@ -687,7 +686,6 @@ watch(menuVisible, (v) => {
     :is-fav="menuSite ? favorites.includes(menuSite.url) : false"
     @action="onContextMenuAction"
   />
-  <AppToast />
 </template>
 
 <style scoped>
