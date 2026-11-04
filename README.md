@@ -31,6 +31,7 @@ pnpm test       # vitest
 
 | 文档                                           | 内容                                   |
 | ---------------------------------------------- | -------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)   | 架构边界（分层 / 依赖方向 / 命名空间） |
 | [docs/design-tokens.md](docs/design-tokens.md) | 设计系统基准（色板 / 字体 / 视觉特征） |
 | [docs/development.md](docs/development.md)     | 开发流程（版本 / 分支 / 提交 / hooks） |
 | [AGENTS.md](AGENTS.md)                         | AI 协作约束与验证清单                  |
