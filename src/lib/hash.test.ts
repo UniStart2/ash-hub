@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildHash, parseHash, type HashState } from './hash';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { parseHash, patchHash, type HashState } from './hash';
 
 describe('parseHash', () => {
   it('空 hash 返回空状态', () => {
@@ -27,33 +27,56 @@ describe('parseHash', () => {
   });
 });
 
-describe('buildHash', () => {
-  it('与 parseHash 互逆（往返一致）', () => {
-    const original: HashState = {
+describe('patchHash', () => {
+  beforeEach(() => history.replaceState(null, '', '/'));
+
+  const current = () => window.location.hash.slice(1);
+
+  it('写入键值后可从 hash 解析回来（与 parseHash 往返一致）', () => {
+    const state: HashState = {
       search: 'a b',
       favOnly: true,
       filters: { types: ['2d'], licenses: ['cc0'], registers: [] },
     };
-    expect(parseHash(buildHash(original))).toEqual(original);
+    patchHash({
+      q: state.search,
+      fav: state.favOnly ? '1' : null,
+      types: state.filters.types.join(',') || null,
+      licenses: state.filters.licenses.join(',') || null,
+      registers: state.filters.registers.join(',') || null,
+    });
+
+    expect(parseHash(window.location.hash)).toEqual(state);
   });
 
-  it('空状态序列化为空串', () => {
-    expect(
-      buildHash({
-        search: '',
-        favOnly: false,
-        filters: { types: [], licenses: [], registers: [] },
-      }),
-    ).toBe('');
+  it('保留无关键：发现域写入不抹掉 view 与 asset', () => {
+    history.replaceState(null, '', '/#view=library&asset=uuid-1');
+    patchHash({ q: 'kenney', fav: '1' });
+
+    const params = new URLSearchParams(current());
+    expect(params.get('view')).toBe('library');
+    expect(params.get('asset')).toBe('uuid-1');
+    expect(params.get('q')).toBe('kenney');
   });
 
-  it('只含搜索词时不产生 fav/types 等噪声参数', () => {
-    expect(
-      buildHash({
-        search: 'x',
-        favOnly: false,
-        filters: { types: [], licenses: [], registers: [] },
-      }),
-    ).toBe('q=x');
+  it('null 与空串都表示删除该键，其余键不动', () => {
+    history.replaceState(null, '', '/#view=library&q=kenney&fav=1');
+    patchHash({ q: null, fav: '' });
+
+    expect(current()).toBe('view=library');
+  });
+
+  it('全部键删除后回到不带 # 的地址', () => {
+    history.replaceState(null, '', '/#view=library');
+    patchHash({ view: null });
+
+    expect(window.location.hash).toBe('');
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('只写一个键时不产生其他噪声参数', () => {
+    patchHash({ q: 'x' });
+
+    expect(current()).toBe('q=x');
   });
 });

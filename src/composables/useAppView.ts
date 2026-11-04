@@ -1,4 +1,5 @@
 import { ref, watch } from 'vue';
+import { patchHash } from '../lib/hash';
 
 export type AppView = 'sites' | 'library';
 
@@ -14,17 +15,7 @@ function readView(): AppView {
 export function useAppView() {
   const view = ref<AppView>(readView());
 
-  watch(view, (v) => {
-    const params = new URLSearchParams(window.location.hash.slice(1));
-    if (v === 'sites') params.delete('view');
-    else params.set('view', v);
-    const next = params.toString();
-    history.replaceState(
-      null,
-      '',
-      next ? '#' + next : window.location.pathname + window.location.search,
-    );
-  });
+  watch(view, (v) => patchHash({ view: v === 'sites' ? null : v }));
 
   return { view };
 }
