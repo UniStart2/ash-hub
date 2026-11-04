@@ -5,6 +5,8 @@ import { MockAssetRepository } from './repository';
 import { MOCK_ASSETS } from './mock';
 import { useAssetLibrary } from './useAssetLibrary';
 import { ASSET_TYPE_LABEL, type Asset, type AssetType } from './types';
+import { usePreview } from './preview/usePreview';
+import PreviewOverlay from './preview/PreviewOverlay.vue';
 import EmptyState from '../../components/EmptyState.vue';
 
 // 数据经 Repository 载入；P1 为 mock 实现，真实实现替换时本组件零改动
@@ -32,6 +34,20 @@ const TYPE_ICONS = {
 } as const;
 
 const activeVersionOf = (a: Asset) => a.versions.find((v) => v.tag === a.currentVersion);
+
+// 预览浮层导航态：asset/ver 与 hash 同构；数据仍由列表提供，浮层只做展示
+const {
+  asset: previewAsset,
+  versions: previewVersions,
+  activeTag: previewTag,
+  activeVersion: previewVersion,
+  hasPrev: previewHasPrev,
+  hasNext: previewHasNext,
+  open: openPreview,
+  close: closePreview,
+  selectVersion: selectPreviewVersion,
+  step: stepPreview,
+} = usePreview({ assets: allAssets });
 
 const hasFilters = computed(
   () =>
@@ -201,7 +217,13 @@ const typeFilters = (Object.keys(ASSET_TYPE_LABEL) as AssetType[]).map((t) => ({
         <div
           v-for="asset in filteredAssets"
           :key="asset.uuid"
-          class="cyber-card card-anim group flex flex-col px-4 py-4 text-inherit"
+          role="button"
+          tabindex="0"
+          :aria-label="`预览 ${asset.name}`"
+          class="cyber-card card-anim group flex flex-col px-4 py-4 text-inherit cursor-pointer focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyber-cyan"
+          @click="openPreview(asset.uuid)"
+          @keydown.enter.prevent="openPreview(asset.uuid)"
+          @keydown.space.prevent="openPreview(asset.uuid)"
         >
           <div class="relative z-10 flex flex-col h-full">
             <div class="flex items-center gap-2 mb-2.5">
@@ -226,7 +248,7 @@ const typeFilters = (Object.keys(ASSET_TYPE_LABEL) as AssetType[]).map((t) => ({
                     ? 'text-cyber-gold'
                     : 'text-cyber-dim2 hover:text-cyber-gold hover:bg-cyber-gold/10'
                 "
-                @click="toggleFav(asset.uuid)"
+                @click.stop="toggleFav(asset.uuid)"
               >
                 <Star
                   class="w-3.5 h-3.5"
@@ -263,7 +285,7 @@ const typeFilters = (Object.keys(ASSET_TYPE_LABEL) as AssetType[]).map((t) => ({
                 v-for="tag in asset.tags"
                 :key="tag"
                 class="font-mono text-[9.5px] tracking-wide bg-white/5 text-cyber-dim border border-transparent rounded-sm px-1.5 py-0.5 cursor-pointer hover:bg-white/10 hover:text-cyber-text transition-colors"
-                @click="toggleTag(tag)"
+                @click.stop="toggleTag(tag)"
                 >{{ tag }}</span
               >
             </div>
@@ -293,4 +315,19 @@ const typeFilters = (Object.keys(ASSET_TYPE_LABEL) as AssetType[]).map((t) => ({
       </EmptyState>
     </main>
   </div>
+
+  <PreviewOverlay
+    v-if="previewAsset && previewVersion"
+    :asset="previewAsset"
+    :active-version="previewVersion"
+    :active-tag="previewTag"
+    :versions="previewVersions"
+    :favorited="favorites.includes(previewAsset.uuid)"
+    :has-prev="previewHasPrev"
+    :has-next="previewHasNext"
+    @close="closePreview"
+    @select-version="selectPreviewVersion"
+    @step="stepPreview"
+    @toggle-favorite="toggleFav(previewAsset.uuid)"
+  />
 </template>
