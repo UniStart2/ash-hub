@@ -222,8 +222,8 @@ const typeFilters = (Object.keys(ASSET_TYPE_LABEL) as AssetType[]).map((t) => ({
           :aria-label="`预览 ${asset.name}`"
           class="cyber-card card-anim group flex flex-col px-4 py-4 text-inherit cursor-pointer focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyber-cyan"
           @click="openPreview(asset.uuid)"
-          @keydown.enter.prevent="openPreview(asset.uuid)"
-          @keydown.space.prevent="openPreview(asset.uuid)"
+          @keydown.enter.self.prevent="openPreview(asset.uuid)"
+          @keydown.space.self.prevent="openPreview(asset.uuid)"
         >
           <div class="relative z-10 flex flex-col h-full">
             <div class="flex items-center gap-2 mb-2.5">
