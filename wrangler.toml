@@ -1,5 +1,9 @@
 # Cloudflare Workers 部署配置（GitHub Actions 通过 wrangler 读取）
 # 纯静态站点：无 Worker 脚本，仅托管 dist/ 静态资产
+#
+# name 与 package.json 的 name 故意不同：Worker 名是已上线的身份标识，
+# 改成 ash-hub 会部署出一个新 Worker，旧 URL 继续供旧内容。
+# 包名（ash-hub）可自由变，此处冻结；改它属于发布变更，需人工决策。
 name = "asset-hub"
 compatibility_date = "2025-01-01"
 

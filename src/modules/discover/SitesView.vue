@@ -13,14 +13,14 @@ import AppSidebar from '../../components/AppSidebar.vue';
 import SiteCard from '../../components/SiteCard.vue';
 import AppPagination from '../../components/AppPagination.vue';
 import EmptyState from '../../components/EmptyState.vue';
-import AppToast from '../../components/AppToast.vue';
 import CommandPalette from '../../components/CommandPalette.vue';
 import ContextMenu from '../../components/ContextMenu.vue';
 import type { FilterKey } from '../../types';
 import { TYPE_LABEL, LICENSE_LABEL, REGISTER_LABEL } from '../../data/labels';
+import { readJson, STORAGE_KEYS } from '../../lib/storage';
 
 // 初始化顺序（与原型 init 一致）：标记 NEW → 应用自定义排序 → 目录状态
-const initialOrder: string[] = JSON.parse(localStorage.getItem('ah_custom_order') || '[]');
+const initialOrder: string[] = readJson(STORAGE_KEYS.customOrder, []);
 const catalog = useSiteCatalog(applyCustomOrder(markNewSites(SITES), initialOrder));
 const { recentSites, clearRecent } = useRecent();
 
@@ -686,7 +686,6 @@ watch(menuVisible, (v) => {
     :is-fav="menuSite ? favorites.includes(menuSite.url) : false"
     @action="onContextMenuAction"
   />
-  <AppToast />
 </template>
 
 <style scoped>

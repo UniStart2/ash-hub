@@ -14,6 +14,7 @@
 - 自定义排序：拖拽卡片，localStorage 持久化
 - 状态分享：搜索 / 筛选 / 收藏同步 URL hash
 - 资产库（mock 数据）：多模态素材（图/音/视/3D）统一列表，类型/标签/收藏筛选，版本溯源与来源字段就绪
+- 资产预览：点击卡片打开浮层，图/音/视真实渲染，版本链切换（`↑` `↓`），来源/许可/参数只读展示；深链 `#view=library&asset=…&ver=…` 可分享
 - 快捷键：`/` 搜索、`R` 随机、`G`/`L` 视图、`S` 收藏、`?` 帮助
 
 ## 快速开始
@@ -31,6 +32,7 @@ pnpm test       # vitest
 
 | 文档                                           | 内容                                   |
 | ---------------------------------------------- | -------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)   | 架构边界（分层 / 依赖方向 / 命名空间） |
 | [docs/design-tokens.md](docs/design-tokens.md) | 设计系统基准（色板 / 字体 / 视觉特征） |
 | [docs/development.md](docs/development.md)     | 开发流程（版本 / 分支 / 提交 / hooks） |
 | [AGENTS.md](AGENTS.md)                         | AI 协作约束与验证清单                  |

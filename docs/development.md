@@ -89,3 +89,5 @@ push 到 `main` 由 `.github/workflows/deploy.yml` 自动构建并双路部署�
 | Cloudflare Workers | `https://asset-hub.<account>.workers.dev` | 仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（Workers 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID`；Worker 由 `wrangler deploy` 自动创建，配置见 `wrangler.toml` |
 
 实现要点：GitHub Pages 挂在子路径，构建时注入 `VITE_BASE=/<repo>/`；Cloudflare 在根路径，`base=/`。两份产物由 matrix 分别构建，不可复用。Cloudflare 侧采用 Workers Static Assets（平台现行方向），纯静态托管，无 Worker 脚本。
+
+Worker 名（`asset-hub`）与包名（`ash-hub`）**故意不一致**：前者是已上线的身份标识，改名等于新起一个 Worker、旧地址继续供旧内容。要改属于发布变更，需人工决策，不是「命名统一」的顺手活。

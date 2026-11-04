@@ -1,10 +1,11 @@
 import { watch } from 'vue';
 import type { ActiveFilters } from '../types';
-import { buildHash, parseHash } from '../lib/hash';
+import { parseHash, patchHash } from '../lib/hash';
 
 /**
- * URL hash 双向同步：初始化时从 hash 恢复状态，之后任何状态变化写回 hash。
+ * URL hash 双向同步：初始化时从 hash 恢复状态，之后任何状态变化写回。
  * 参数格式冻结为 q/fav/types/licenses/registers（原型 v22 行为），分享链接可还原。
+ * 写回走 patchHash 增量合并，不碰 `view`（应用级）等其他模块的键。
  */
 export function useHashSync(deps: {
   search: { value: string };
@@ -20,16 +21,14 @@ export function useHashSync(deps: {
   watch(
     [deps.search, deps.favOnly, deps.activeFilters],
     () => {
-      const newHash = buildHash({
-        search: deps.search.value,
-        favOnly: deps.favOnly.value,
-        filters: deps.activeFilters.value,
+      const { types, licenses, registers } = deps.activeFilters.value;
+      patchHash({
+        q: deps.search.value || null,
+        fav: deps.favOnly.value ? '1' : null,
+        types: types.join(',') || null,
+        licenses: licenses.join(',') || null,
+        registers: registers.join(',') || null,
       });
-      history.replaceState(
-        null,
-        '',
-        newHash ? '#' + newHash : window.location.pathname + window.location.search,
-      );
     },
     { deep: true },
   );

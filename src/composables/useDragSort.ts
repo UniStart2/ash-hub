@@ -1,11 +1,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { Site } from '../types';
 import { reorderUrls } from '../lib/reorder';
+import { STORAGE_KEYS } from '../lib/storage';
 
 /**
  * 拖拽排序状态与手势处理，重排数学在 lib/reorder.ts（纯函数，已单测）。
  * 与原型一致：仅「推荐排序 + 无搜索 + 无筛选」时允许拖拽，
- * customOrder 持久化到 ah_custom_order，切换视图/排序/筛选时清理拖拽态。
+ * customOrder 持久化到 STORAGE_KEYS.customOrder，切换视图/排序/筛选时清理拖拽态。
  */
 export function useDragSort(deps: {
   displayedSites: { value: Site[] };
@@ -77,7 +78,7 @@ export function useDragSort(deps: {
       deps.customOrder.value,
     );
     deps.customOrder.value = nextOrder;
-    localStorage.setItem('ah_custom_order', JSON.stringify(nextOrder));
+    localStorage.setItem(STORAGE_KEYS.customOrder, JSON.stringify(nextOrder));
     clearDragState();
   }
 
