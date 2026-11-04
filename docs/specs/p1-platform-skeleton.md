@@ -74,7 +74,8 @@ export interface AssetRepository {
 
 P1 实现 `MockAssetRepository`：内存数据 + 每次 put 自增 rev、永不冲突（本地恒为最新）。IndexedDB 实现（`IdbAssetRepository`）与句柄持久化留待导入功能。
 
-存储键：`ah_assets_favs`（收藏，uuid 数组）、`ah_assets_tags`（预留：自定义标签）。**禁用**裸 `ah_favs`（站点域专属）。
+存储键：`ash-hub_assets_favs`（收藏，uuid 数组）。**禁用**发现域 `ash-hub_favs`（站点专属）。
+键名统一经 `src/lib/storage.ts` 的 `STORAGE_KEYS` 取用，组件内不写字面量；旧前缀 `ah_*` 由该模块只读迁移（P1 初版键名为 `ah_assets_favs`，已在存储层改名）。
 
 ## 应用壳与模块切换
 
@@ -89,7 +90,7 @@ P1 实现 `MockAssetRepository`：内存数据 + 每次 put 自增 rev、永不�
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | 顶部搜索框（`>` 进命令模式）                       | 纯搜索框；命令能力并入全局 `Ctrl+K` 面板，不建第二套命令系统                                                                   |
 | 类型筛选（3D/视频/音频/图片）                      | 侧栏筛选组，选中态 cyan 发光（同发现域交互）                                                                                   |
-| 标签筛选 + 收藏视图                                | 同侧栏；收藏持久化 `ah_assets_favs`                                                                                            |
+| 标签筛选 + 收藏视图                                | 同侧栏；收藏持久化 `ash-hub_assets_favs`                                                                                       |
 | 资产卡片（缩略图/类型角标/版本/来源引擎/悬浮详情） | `SiteCard` 同款 cyber-card：角标 hover、聚光灯、许可配色规则不适用（资产域无 license 配色语义，统一 cyan 主色）                |
 | zinc 调色                                          | `bg-base→cyber-bg`、`panel→cyber-panel`、`border-zinc-700/800→cyber-line`、`text-zinc-400→cyber-dim`、`primary(蓝)→cyber-cyan` |
 | daisyUI 组件类（btn/input/kbd）                    | 不用 daisyUI；按现有 input/button 风格重写                                                                                     |

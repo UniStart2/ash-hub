@@ -20,10 +20,10 @@ ASSET//HUB：面向独立游戏开发者的**游戏素材一体化管理平台**
 - 组件化重写须像素级保留视觉与交互；改设计单独提交并说明理由
 - 迁移顺序：先抽 tokens → 再抽组件 → 最后接状态（composables，不引入全局状态库）
 - localStorage 键名冻结（前缀 = 项目名 `ash-hub_`）：发现域 `ash-hub_favs` / `ash-hub_recent` / `ash-hub_custom_order`；资产域 `ash-hub_assets_*`（P1：`ash-hub_assets_favs`）。两域键零交叉；旧前缀 `ah_*` 由 `src/lib/storage.ts` 只读迁移，键名字面量禁止散落在组件里
-- URL hash 参数冻结：发现域 `q` / `fav` / `types` / `licenses` / `registers`；应用级 `view`（`sites` 缺省 / `library`）
+- URL hash 参数冻结：发现域 `q` / `fav` / `types` / `licenses` / `registers`；应用级 `view`（`sites` 缺省 / `library`）；资产域 `asset`（预览资产 uuid）/ `ver`（预览版本 tag）。**唯一写者** `src/lib/hash.ts` 的 `patchHash`
 - 站点数据结构冻结：`{ name, url, desc, types, license, register, tags, featured?, addedAt? }`（运行时派生 `isNew`）
 - 资产数据结构见 `src/modules/library/types.ts`（`Asset` / `AssetVersion` / `AssetSource`，UUIDv7）
-- 快捷键表冻结：`/` `R` `G` `L` `S` `?` `Esc` `Ctrl/Cmd+K`，收拢为单一 composable；模块切换不新增按键
+- 快捷键表冻结：`/` `R` `G` `L` `S` `?` `Esc` `Ctrl/Cmd+K`，收拢为单一 composable；模块切换不新增按键。模块内作用域键另计：预览浮层内 `↑` `↓`（版本，与竖直版本链同向）与 `Space`（音视频播放），不进全局表
 - **命名空间登记表以 [docs/architecture.md §3](docs/architecture.md) 为唯一记录**（localStorage 前缀 / hash 参数 / z-index 层 / token）；本文件只冻结既有值，新增项先登记再实现
 
 ## 3. 文档职责

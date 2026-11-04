@@ -102,7 +102,7 @@ hash 只能有一个写者：所有写方走 `src/lib/hash.ts` 的 `patchHash`�
 ## 9. 已登记的欠账（记录，不在 P2 之前处理）
 
 - `composables/` 平铺：`useHotkeys` `useSiteCatalog` `useDragSort` `useRecent` 实际属发现域，暂标为私有，物理搬迁随 P3 重组
-- `AppToast` 挂在 `SitesView` 内部 → **资产域没有 toast 层**；P2 预览器要提示错误态前必须先提到 `AppShell`（§6「toast 全局唯一」）
-- 提到 `AppShell` 时连带修 z-index：`AppToast` 与 `CommandPalette` 同为 `z-[10000]`，当前靠 DOM 顺序（toast 在后）偶然压住面板，顺序一变就被全屏遮罩吞掉；按 §3 应为 40000
-- `useHashSync` 全量重建 hash，抹掉 `view`：P2 前置修复（见 p2 规格）
+- 预览浮层焦点陷阱只做 Tab 回环，未处理「鼠标点穿到背景」与 `aria-hidden` 背景隔离，随 P3 无障碍收口
+- `useHashSync` 全量重建 hash，抹掉 `view`：**已修复**（`patchHash` 单写者，P2 前置提交）
+- `AppToast` 与 `CommandPalette` 撞层 + toast 仅挂发现域：**已修复**（toast 移入 `AppShell`，`z-[40000]`）
 - 旧 `ah_*` 键迁移代码（`lib/storage.ts`）是兼容层，待下个大版本确认无老数据后移除
